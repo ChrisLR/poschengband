@@ -296,6 +296,7 @@ bool alert_trap_detect;    /* Alert when leaving trap detected area */
 /*** Birth Options ***/
 
 bool easy_id;        /* Easy Identify */
+bool always_corpse;  /* Monsters always leave a corpse */
 bool easy_lore;      /* Easy Monster Lore */
 bool smart_learn;    /* Monsters learn from their mistakes (*) */
 bool smart_cheat;    /* Monsters exploit players weaknesses (*) */

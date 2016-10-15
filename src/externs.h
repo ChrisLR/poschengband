@@ -315,6 +315,7 @@ extern bool alert_trap_detect;    /* Alert when leaving trap detected area */
 /*** Birth Options ***/
 
 extern bool easy_id;        /* Easy Identify */
+extern bool always_corpse;  /* Monsters always leave a corpse behind */
 extern bool easy_lore;      /* Easy Monster Lore */
 extern bool smart_learn;    /* Monsters learn from their mistakes (*) */
 extern bool smart_cheat;    /* Monsters exploit players weaknesses (*) */
