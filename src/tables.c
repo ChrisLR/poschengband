@@ -3427,9 +3427,6 @@ option_type option_info[] =
     { &easy_id,                     FALSE, OPT_PAGE_BIRTH, 6, 31,
     "easy_id",                      "Easy Identify" },
 
-	{ &always_corpse,               FALSE, OPT_PAGE_BIRTH, 6, 32,
-    "always_corpse",                "Monsters always leave a corpse." },
-
     { &easy_lore,                   FALSE, OPT_PAGE_BIRTH, 6, 30,
     "easy_lore",                    "Easy Lore" },
 
@@ -3495,6 +3492,9 @@ option_type option_info[] =
 
     { &no_egos,                            FALSE, OPT_PAGE_BIRTH, 6, 25,
     "no_egos",                            "Never create ego items" },
+
+	{ &always_corpse,               FALSE, OPT_PAGE_BIRTH, 6, 32,
+    "always_corpse",                "Monsters always leave a corpse." },
 
     /*** Easy Object Auto-Destroyer ***/
 
