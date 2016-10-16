@@ -2209,6 +2209,7 @@ extern race_t *snotling_get_race(void);
 extern race_t *spectre_get_race(void);
 extern race_t *sprite_get_race(void);
 extern race_t *tonberry_get_race(void);
+extern race_t *urukhai_get_race(void);
 extern race_t *vampire_get_race(void);
 extern race_t *wood_elf_get_race(void);
 extern race_t *yeek_get_race(void);

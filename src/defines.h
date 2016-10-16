@@ -688,7 +688,8 @@
 /* TODO: New races are in progress! ... */
     #define RACE_MON_GHOST          62
     #define RACE_MON_ZOMBIE         63
-    #define MAX_RACES               62 /* TODO: Bump me!! */
+	#define RACE_URUKHAI            64
+    #define MAX_RACES               64 /* TODO: Bump me!! */
 
 #define DEMIGOD_MINOR           0
 #define DEMIGOD_ZEUS            1

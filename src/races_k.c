@@ -813,6 +813,71 @@ race_t *tonberry_get_race(void)
 }
 
 /****************************************************************
+ * Uruk-hai
+ ****************************************************************/
+static void _urukhai_calc_bonuses(void)
+{
+    p_ptr->sustain_str = TRUE;
+    p_ptr->sustain_con = TRUE;
+    res_add(RES_FEAR);
+	res_add(OF_RES_DARK);
+	if (p_ptr->pclass != CLASS_NINJA) p_ptr->lite = TRUE;
+}
+static void _urukhai_get_flags(u32b flgs[OF_ARRAY_SIZE])
+{
+    add_flag(flgs, OF_SUST_STR);
+    add_flag(flgs, OF_SUST_CON);
+    add_flag(flgs, OF_RES_DARK);
+    add_flag(flgs, OF_RES_FEAR);
+    add_flag(flgs, OF_VULN_LITE);
+}
+
+race_t *urukhai_get_race(void)
+{
+    static race_t me = {0};
+    static bool init = FALSE;
+
+    if (!init)
+    {
+        me.name = "Uruk-hai";
+        me.desc = "Uruk-hai are a stronger breed of Orc, cruel, wicked and bad-hearted. "
+                    "They hate everybody and everything, particularly the orderly and prosperous. "
+                    "This has been so from the day they were bred by Melkor from corrupted, tortured and mutilated elves "
+                    "that may also have been forced to breed with other unnatural abominations in the dominion of the Dark Powers. "
+                    "Despite their abominable nature, they are not dim-witted and are clever and crafty and make good tools, "
+                    "weapons, and machines of war but produce no beautiful things nor do they trade or share anything with others, "
+                    "unless ordered to by a Dark Lord for the purposes of war and conquest. ";
+
+        me.stats[A_STR] =  4;
+        me.stats[A_INT] =  0;
+        me.stats[A_WIS] = -2;
+        me.stats[A_DEX] =  0;
+        me.stats[A_CON] =  4;
+        me.stats[A_CHR] = -4;
+
+        me.skills.dis = -2;
+        me.skills.dev =  2;
+        me.skills.sav =  4;
+        me.skills.stl =  2;
+        me.skills.srh =  2;
+        me.skills.fos =  4;
+        me.skills.thn = 20;
+        me.skills.thb = 10;
+
+        me.life = 105;
+        me.base_hp = 25;
+        me.exp = 175;
+        me.infra = 5;
+        me.shop_adjust = 125;
+
+        me.calc_bonuses = _urukhai_calc_bonuses;
+        me.get_flags = _urukhai_get_flags;
+        init = TRUE;
+    }
+
+    return &me;
+}
+/****************************************************************
  * Vampire
  ****************************************************************/
 static power_info _vampire_powers[] =

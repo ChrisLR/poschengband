@@ -353,6 +353,21 @@ Base HP       10        Bows        <color:r>Bad          </color>
 Experience    45%       Infravision 20'
 </style></indent>
 </indent>
+<topic:Uruk-hai><color:o>Uruk-hai</color>
+Uruk-hai are a stronger breed of Orc, cruel, wicked and bad-hearted. They hate everybody and everything, particularly the orderly and prosperous. This has been so from the day they were bred by Melkor from corrupted, tortured and mutilated elves that may also have been forced to breed with other unnatural abominations in the dominion of the Dark Powers. Despite their abominable nature, they are not dim-witted and are clever and crafty and make good tools, weapons, and machines of war but produce no beautiful things nor do they trade or share anything with others, unless ordered to by a Dark Lord for the purposes of war and conquest.
+
+  <indent><style:table><color:G>Stats                   Skills</color>
+Strength      4        Disarming   <color:r>Bad          </color>
+Intelligence  0        Device      <color:o>Fair         </color>
+Wisdom       -2        Save        <color:y>Good         </color>
+Dexterity     0        Stealth     <color:o>Fair         </color>
+Constitution  4        Searching   <color:o>Fair         </color>
+Charisma     -4        Perception  <color:y>Good         </color>
+Life Rating   105%     Melee       <color:G>Excellent    </color>
+Base HP       25       Bows        <color:y>Good         </color>
+Experience    175%     Infravision 20'
+</style></indent>
+</indent>
 <style:heading>The Undead</style>
   <indent><topic:Skeleton><color:o>Skeleton</color>
 There are two types of skeletons: the ordinary, warrior-like skeletons, and the spell-using skeletons, which are also called liches. As undead beings, skeletons need to worry very little about poison or attacks that can drain life. They do not really use eyes for perceiving things, and are thus not fooled by invisibility. Their bones are resistant to sharp shrapnel, and they will quickly become resistant to cold. Although the magical effects of these will affect the skeleton even without entering the skeleton's (non-existent) belly, the potion or food itself will fall through the skeleton's jaws, giving no nutritional benefit. They can absorb mana from staves and wands as their energy source.

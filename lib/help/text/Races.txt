@@ -471,6 +471,26 @@ Orcs/Trolls/Giants
     Life Rating   85%       Melee       Bad          
     Base HP       10        Bows        Bad          
     Experience    45%       Infravision 20'
+
+  Uruk-Hai
+  Uruk-hai are a stronger breed of Orc, cruel, wicked and bad-hearted.
+  They hate everybody and everything, particularly the orderly and prosperous.
+  This has been so from the day they were bred by Melkor from corrupted, tortured and mutilated elves
+  that may also have been forced to breed with other unnatural abominations in the dominion of the Dark Powers.
+  Despite their abominable nature, they are not dim-witted and are clever and crafty and make good tools,
+  weapons, and machines of war but produce no beautiful things nor do they trade or share anything with others,
+  unless ordered to by a Dark Lord for the purposes of war and conquest.
+  
+    Stats                   Skills
+    Strength      4        Disarming   Bad          
+    Intelligence  0        Device      Fair          
+    Wisdom       -2        Save        Good          
+    Dexterity     0        Stealth     Fair         
+    Constitution  4        Searching   Fair          
+    Charisma     -4        Perception  Good    
+    Life Rating   105%     Melee       Excellent          
+    Base HP       25       Bows        Good          
+    Experience    175%     Infravision 20'
     
   
 The Undead
