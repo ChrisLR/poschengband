@@ -285,6 +285,13 @@ static void _artemis_get_flags(u32b flgs[OF_ARRAY_SIZE])
 {
     add_flag(flgs, OF_SUST_DEX);
 }
+static void _artemis_birth(void)
+{
+    py_birth_obj_aux(TV_BOW, SV_SHORT_BOW, 1);
+    py_birth_obj_aux(TV_ARROW, SV_ARROW, rand_range(15, 20));
+    py_birth_food();
+    py_birth_light();
+}
 
 /****************************************************************
  * Athena
@@ -465,13 +472,14 @@ race_t *demigod_get_race(int psubrace)
         me.skills.srh =  0;
         me.skills.fos =  7;
         me.skills.thn = 10;
-        me.skills.thb =  5;
+        me.skills.thb =  3;
 
         me.life = 100;
         me.base_hp = 20;
         me.exp = 180;
         me.shop_adjust = 100;
 
+        me.birth = NULL;
         me.calc_bonuses = NULL;
         me.get_powers = NULL;
         me.get_flags = NULL;
@@ -543,8 +551,9 @@ race_t *demigod_get_race(int psubrace)
                          "nimble. Your skills with the bow are unmatched and you shoot arrows "
                          "with increased range and deadliness.";
             me.stats[A_DEX] += 2;
-            me.skills.thb += 15;
+            me.skills.thb += 12;
             me.exp += 50;
+            me.birth = _artemis_birth;
             me.calc_bonuses = _artemis_calc_bonuses;
             me.get_flags = _artemis_get_flags;
             break;
@@ -652,7 +661,7 @@ race_t *demigod_get_race(int psubrace)
             me.skills.dev += 5;
             me.skills.sav += 5;
             me.skills.thn += 10;
-            me.skills.thb += 5;
+            me.skills.thb += 3;
             for (i = 0; i < 6; i++)
                 me.stats[i]++;
             me.exp += 70;

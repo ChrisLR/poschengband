@@ -86,11 +86,11 @@ R:0:0/0x97
 
 ?:[EQU $CLASS Warrior]
 R:0:0xA4/0
-?:[EQU $CLASS Mage Blood-Mage Necromancer]
+?:[EQU $CLASS Mage Blood-Mage Necromancer Yellow-Mage Gray-Mage]
 R:0:0xA5/0
 ?:[EQU $CLASS Priest]
 R:0:0xA6/0
-?:[EQU $CLASS Rogue]
+?:[EQU $CLASS Rogue Skillmaster]
 R:0:0xA7/0
 ?:[EQU $CLASS Ranger]
 R:0:0xA8/0

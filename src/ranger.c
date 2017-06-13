@@ -2,11 +2,8 @@
 
 static void _calc_shooter_bonuses(object_type *o_ptr, shooter_info_t *info_ptr)
 {
-    if ( !p_ptr->shooter_info.heavy_shoot
-      && p_ptr->shooter_info.tval_ammo == TV_ARROW )
-    {
-        p_ptr->shooter_info.num_fire += p_ptr->lev * 150 / 50;
-    }
+    if (p_ptr->shooter_info.tval_ammo != TV_ARROW )
+        p_ptr->shooter_info.base_shot = 100;
 }
 
 static int _get_powers(spell_info* spells, int max)
@@ -30,13 +27,24 @@ static caster_info * _caster_info(void)
     {
         me.magic_desc = "spell";
         me.which_stat = A_WIS;
-        me.weight = 450;
+        me.encumbrance.max_wgt = 450;
+        me.encumbrance.weapon_pct = 33;
+        me.encumbrance.enc_wgt = 1000;
         me.min_level = 3;
         me.min_fail = 5;
         me.options = CASTER_GLOVE_ENCUMBRANCE;
         init = TRUE;
     }
     return &me;
+}
+
+static void _birth(void)
+{
+    py_birth_obj_aux(TV_SWORD, SV_DAGGER, 1);
+    py_birth_obj_aux(TV_SOFT_ARMOR, SV_SOFT_LEATHER_ARMOR, 1);
+    py_birth_obj_aux(TV_BOW, SV_SHORT_BOW, 1);
+    py_birth_obj_aux(TV_ARROW, SV_ARROW, rand_range(20, 40));
+    py_birth_spellbooks();
 }
 
 class_t *ranger_get_class(void)
@@ -77,7 +85,10 @@ class_t *ranger_get_class(void)
         me.base_hp = 8;
         me.exp = 140;
         me.pets = 35;
+        me.flags = CLASS_SENSE1_SLOW | CLASS_SENSE1_STRONG |
+                   CLASS_SENSE2_SLOW | CLASS_SENSE2_STRONG;
         
+        me.birth = _birth;
         me.caster_info = _caster_info;
         me.calc_shooter_bonuses = _calc_shooter_bonuses;
         /* TODO: This class uses spell books, so we are SOL

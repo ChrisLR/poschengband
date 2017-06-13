@@ -189,7 +189,7 @@ I:45:0:5
 W:100:127:2:5000000
 P:0:1d1:0:0:0
 F:STR | INT | WIS | DEX | CON | CHR | SPEED | HIDE_TYPE |
-F:CURSED | HEAVY_CURSE | PERMA_CURSE |
+F:CURSED | HEAVY_CURSE | PERMA_CURSE | FIXED_ART
 F:AGGRAVATE | DRAIN_EXP | SEE_INVIS | REGEN | TY_CURSE |
 F:IM_FIRE | IM_COLD | IM_ELEC | IM_ACID |
 F:SUST_STR | SUST_DEX | SUST_CON |
@@ -428,7 +428,7 @@ F:STR | INT | WIS | DEX | CON | CHR | INFRA | HIDE_TYPE |
 F:RES_ACID | RES_ELEC | RES_FIRE | RES_COLD | RES_POIS |
 F:RES_LITE | RES_DARK | RES_CONF | RES_NEXUS |
 F:LITE | SEE_INVIS | TELEPATHY |
-F:CURSED | HEAVY_CURSE | PERMA_CURSE | NO_TELE | INSTA_ART | QUESTITEM
+F:CURSED | HEAVY_CURSE | PERMA_CURSE | NO_TELE | INSTA_ART | QUESTITEM | FIXED_ART
 
 # The Iron Crown of Beruthiel
 
@@ -1343,7 +1343,7 @@ P:0:9d9:5:25:10
 F:KILL_DRAGON | SLAY_ANIMAL | SLAY_EVIL | IMPACT | SLAY_UNDEAD | NO_MAGIC |
 F:SLAY_DEMON | SLAY_TROLL | SLAY_ORC | RES_ACID | RES_ELEC | RES_FIRE |
 F:RES_COLD | SEE_INVIS | TELEPATHY | AGGRAVATE | SHOW_MODS | INSTA_ART |
-F:SLAY_HUMAN | RIDING | QUESTITEM
+F:SLAY_HUMAN | RIDING | QUESTITEM | FIXED_ART
 D:The mighty Hammer of the Underworld, blackened by doomspells of shattering,
 D:whose wielder holds the lives of all Morgoth's servants in his hand.
 
@@ -1503,7 +1503,7 @@ F:BLOWS | BRAND_VAMP | HOLD_LIFE | SLAY_UNDEAD | SLAY_EVIL | SLAY_HUMAN |
 F:REGEN | RES_BLIND | SLOW_DIGEST | SHOW_MODS
 
 N:124:'Belthronding'
-I:19:13:3
+I:19:13:4
 W:70:20:40:60000
 P:0:x3.00:20:22:0
 F:DEX | STEALTH | HIDE_TYPE | RES_DISEN | XTRA_SHOTS | SHOW_MODS
@@ -1521,7 +1521,7 @@ D:songs record.
 N:126:of Brand
 I:19:23:5
 W:70:25:110:100000
-P:0:x4.25:10:12:0
+P:0:x4.25:10:17:0
 F:SPEED | RES_FIRE | SHOW_MODS | XTRA_RES_OR_POWER
 F:BRAND_FIRE
 
@@ -1612,7 +1612,7 @@ D: alive, by the command of Morgoth..."
 N:134:of Buckland
 I:19:2:3
 W:40:35:20:50000
-P:0:x3.00:19:15:0
+P:0:x2.75:19:15:0
 F:SPEED | RES_BLIND | RES_CONF | SHOW_MODS | XTRA_RES_OR_POWER
 D:A sling granting extraordinary clarity of mind amidst darkness and
 D:confusion, and which hurls shot with deadly speed.
@@ -2181,7 +2181,7 @@ F:LITE | BLESSED | SEE_INVIS | SHOW_MODS
 E:BALL_WATER:50:250:200
 E:Your awl pike throbs deep blue...
 
-N:203:of The High Preist of Morlok
+N:203:of The High Priest of Morlok
 I:37:1:2
 W:90:8:200:100000
 P:14:1d4:-5:0:-40
@@ -2251,7 +2251,7 @@ F:DEC_INT | DEC_WIS | DEC_CHR | DEC_STEALTH | DEC_SPEED | RES_FIRE |
 F:SUST_STR | SUST_CON | AURA_FIRE | REGEN | RES_FEAR
 
 N:211:of Nain
-I:20:7:5
+I:20:7:6
 W:60:10:250:80000
 P:0:3d8:12:18:0
 F:TUNNEL | INFRA | SEARCH | STR |
@@ -2337,7 +2337,7 @@ E:BALL_DARK:50:100:250
 E:Your collar harness is covered in pitch-darkness...
 
 N:219:Charmed Pendant
-I:40:0:3
+I:40:0:2
 W:50:50:2:100000
 P:0:0d0:0:0:5
 F:INT | CHR | INFRA | SEARCH | HIDE_TYPE | FULL_NAME |
@@ -2365,7 +2365,7 @@ D:This is of Robin Hood who live in the deep forest.
 N:222:of Hellfire
 I:19:23:4
 W:50:15:110:60000
-P:0:x4.00:10:12:0
+P:0:x4.00:10:18:0
 F:STR | INFRA | RES_FIRE | AURA_FIRE |
 F:HIDE_TYPE | SHOW_MODS
 F:BRAND_FIRE
@@ -2554,8 +2554,8 @@ N:242:of Bilbo
 I:37:20:2
 W:60:4:70:200000
 P:28:1d4:2:2:7
-F:STEALTH | DEC_STR | SEE_INVIS | DEX | SPEED |
-F:RES_ACID | RES_FIRE | RES_COLD | RES_POIS | RES_DARK | XTRA_H_RES
+F:STEALTH | SEE_INVIS | DEX | SPEED |
+F:RES_ACID | RES_ELEC | RES_FIRE | RES_COLD | RES_POIS | RES_DARK | XTRA_H_RES
 D:"Also there is this!" said Bilbo, bringing out a parcel which seemed
 D:to be rather heavy for its size. He unwound several folds of old cloth,
 D:and held up a small shirt of mail. It was close-woven of many rings,
@@ -2615,7 +2615,7 @@ I:31:2:2
 W:99:150:25:200000
 P:2:0d0:10:100:0
 F:FREE_ACT | SUST_STR | SUST_CON | STR | CON | RES_TIME | RES_DISEN
-F:DEC_BLOWS | DEC_SPEED | VULN_CONF
+F:DEC_BLOWS | DEC_SPEED | VULN_CONF | QUESTITEM
 
 N:248:of the Duelist
 I:23:7:4
@@ -2865,7 +2865,7 @@ D:This arrow is traditionally shot only by fat, scantily clad babies.
 N:271:'Ballista'
 I:19:24:3
 W:50:15:110:60000
-P:0:x5.00:10:12:0
+P:0:x5.00:10:20:0
 F:HIDE_TYPE | SHOW_MODS
 F:STR | RES_CONF
 E:PIERCING_SHOT:30:100

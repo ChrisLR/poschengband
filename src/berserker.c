@@ -123,6 +123,7 @@ static void _calc_bonuses(void)
     if (p_ptr->lev > 39) p_ptr->reflect = TRUE;
     if (p_ptr->lev > 34) p_ptr->no_stun = TRUE;
     p_ptr->redraw |= PR_STATUS;
+    p_ptr->auto_pseudo_id = TRUE;
 }
 
 static void _get_flags(u32b flgs[OF_ARRAY_SIZE])
@@ -179,10 +180,16 @@ static caster_info * _caster_info(void)
         me.magic_desc = "brutal power";
         me.which_stat = A_STR;
         me.options = CASTER_USE_HP;
-        me.weight = 1000;
         init = TRUE;
     }
     return &me;
+}
+
+static void _birth(void)
+{
+    py_birth_obj_aux(TV_POLEARM, SV_BROAD_AXE, 1);
+    py_birth_obj_aux(TV_HARD_ARMOR, SV_AUGMENTED_CHAIN_MAIL, 1);
+    py_birth_obj_aux(TV_POTION, SV_POTION_HEALING, 1);
 }
 
 class_t *berserker_get_class(void)
@@ -225,6 +232,7 @@ class_t *berserker_get_class(void)
         me.exp = 160;
         me.pets = 255;
         
+        me.birth = _birth;
         me.calc_bonuses = _calc_bonuses;
         me.get_flags = _get_flags;
         me.calc_weapon_bonuses = _calc_weapon_bonuses;

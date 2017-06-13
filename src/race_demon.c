@@ -19,10 +19,26 @@ static caster_info * _caster_info(void)
     {
         me.magic_desc = "devilish power";
         me.which_stat = A_INT;
-        me.weight = 750;
+        me.encumbrance.max_wgt = 750;
+        me.encumbrance.weapon_pct = 0;
+        me.encumbrance.enc_wgt = 800;
         init = TRUE;
     }
     return &me;
+}
+
+static void _demon_birth(void)
+{
+    int i, ct = rand_range(3, 4);
+    get_mon_num_prep(monster_hook_human, NULL);
+    for (i = 0; i < ct; i++)
+    {
+        object_type forge = {0};
+        object_prep(&forge, lookup_kind(TV_CORPSE, SV_CORPSE));
+        forge.pval = get_mon_num(2);
+        py_birth_obj(&forge);
+    }
+    py_birth_light();
 }
 
 /******************************************************************************
@@ -39,10 +55,10 @@ static void _khorne_birth(void)
     object_prep(&forge, lookup_kind(TV_RING, 0));
     forge.name2 = EGO_RING_COMBAT;
     forge.to_d = 6;
-    add_outfit(&forge);
+    py_birth_obj(&forge);
 
     object_prep(&forge, lookup_kind(TV_SOFT_ARMOR, SV_LEATHER_SCALE_MAIL));
-    add_outfit(&forge);
+    py_birth_obj(&forge);
 
     object_prep(&forge, lookup_kind(TV_SWORD, SV_BLADE_OF_CHAOS));
     forge.name2 = EGO_WEAPON_SHARPNESS;
@@ -52,7 +68,9 @@ static void _khorne_birth(void)
     forge.ds = 6;
     forge.weight = 220;
     add_flag(forge.flags, OF_VORPAL);
-    add_outfit(&forge);
+    py_birth_obj(&forge);
+
+    _demon_birth();
 }
 
 static void _khorne_calc_innate_attacks(void)
@@ -271,7 +289,7 @@ static void _khorne_gain_level(int new_level)
         forge.weight = 500;
         forge.to_h = 15;
         forge.to_d = 15;
-        add_outfit(&forge);
+        py_birth_obj(&forge);
         p_ptr->update |= PU_BONUS;
     }
 }
@@ -363,15 +381,17 @@ static void _marilith_birth(void) {
     object_prep(&forge, lookup_kind(TV_RING, 0));
     forge.name2 = EGO_RING_COMBAT;
     forge.to_d = 3;
-    add_outfit(&forge);
+    py_birth_obj(&forge);
 
     object_prep(&forge, lookup_kind(TV_SOFT_ARMOR, SV_LEATHER_SCALE_MAIL));
-    add_outfit(&forge);
+    py_birth_obj(&forge);
 
     object_prep(&forge, lookup_kind(TV_SWORD, SV_BROAD_SWORD));
     forge.to_h = 1;
     forge.to_d = 2;
-    add_outfit(&forge);
+    py_birth_obj(&forge);
+
+    _demon_birth();
 }
 
 static void _marilith_calc_innate_attacks(void) {
@@ -501,7 +521,6 @@ static void _marilith_gain_level(int new_level) {
     {
         p_ptr->current_r_idx = MON_MARILITH;
         p_ptr->psex = SEX_FEMALE;
-        sp_ptr = &sex_info[p_ptr->psex];
         msg_print("You have evolved into a Marilith.");
         equip_on_change_race();
         p_ptr->redraw |= PR_MAP;
@@ -603,10 +622,10 @@ static void _balrog_birth(void)
     object_prep(&forge, lookup_kind(TV_RING, 0));
     forge.name2 = EGO_RING_COMBAT;
     forge.to_d = 5;
-    add_outfit(&forge);
+    py_birth_obj(&forge);
 
     object_prep(&forge, lookup_kind(TV_SOFT_ARMOR, SV_LEATHER_SCALE_MAIL));
-    add_outfit(&forge);
+    py_birth_obj(&forge);
 
     object_prep(&forge, lookup_kind(TV_HAFTED, SV_WHIP));
     forge.name2 = EGO_WEAPON_SLAYING;
@@ -615,7 +634,9 @@ static void _balrog_birth(void)
     forge.ds = 6;
     forge.to_h = 5;
     forge.to_d = 5;
-    add_outfit(&forge);
+    py_birth_obj(&forge);
+
+    _demon_birth();
 }
 static void _balrog_calc_bonuses(void) {
     p_ptr->align -= 200;
@@ -628,7 +649,7 @@ static void _balrog_calc_bonuses(void) {
     p_ptr->pspeed += p_ptr->lev/8; /* Angels get +7 speed. Demons get +6 speed. */
     p_ptr->sh_fire = TRUE;
 
-    if (equip_find_artifact(ART_STONE_OF_DAEMON))
+    if (equip_find_art(ART_STONE_OF_DAEMON))
     {
         p_ptr->dec_mana = TRUE;
         p_ptr->easy_spell = TRUE;
@@ -754,7 +775,7 @@ void _cyber_rocket_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
 
         msg_print("You launch a rocket.");
         fire_rocket(GF_ROCKET, dir, _rocket_amount(), 2);
@@ -788,13 +809,15 @@ static void _cyber_birth(void)
     object_prep(&forge, lookup_kind(TV_RING, 0));
     forge.name2 = EGO_RING_COMBAT;
     forge.to_d = 10;
-    add_outfit(&forge);
+    py_birth_obj(&forge);
 
     object_prep(&forge, lookup_kind(TV_SOFT_ARMOR, SV_LEATHER_SCALE_MAIL));
-    add_outfit(&forge);
+    py_birth_obj(&forge);
 
     object_prep(&forge, lookup_kind(TV_HAFTED, SV_GREAT_HAMMER));
-    add_outfit(&forge);
+    py_birth_obj(&forge);
+
+    _demon_birth();
 }
 
 static void _cyber_calc_bonuses(void)

@@ -1360,22 +1360,53 @@ void py_get_display_char_attr(char *c, byte *a)
 {
     monster_race *r_ptr;
 
-    switch (p_ptr->mimic_form)
+    if (display_race)
     {
-    case MIMIC_BAT:
-        r_ptr = &r_info[MON_VAMPIRE_BAT];
-        break;
-    case MIMIC_MIST:
-        r_ptr = &r_info[MON_VAMPIRIC_MIST];
-        break;
-    case MIMIC_WOLF:
-        r_ptr = &r_info[196];
-        break;
-    default:
-        r_ptr = &r_info[p_ptr->current_r_idx];
+        switch (p_ptr->mimic_form)
+        {
+        case MIMIC_VAMPIRE:
+            r_ptr = &r_info[MON_MASTER_VAMPIRE];
+            break;
+        case MIMIC_DEMON:
+            r_ptr = &r_info[MON_G_BALROG];
+            break;
+        case MIMIC_DEMON_LORD:
+            r_ptr = &r_info[MON_GOTHMOG];
+            break;
+        case MIMIC_BAT:
+            r_ptr = &r_info[MON_VAMPIRE_BAT];
+            break;
+        case MIMIC_MIST:
+            r_ptr = &r_info[MON_VAMPIRIC_MIST];
+            break;
+        case MIMIC_WOLF:
+            r_ptr = &r_info[196];
+            break;
+        default:
+            r_ptr = &r_info[p_ptr->current_r_idx];
+        }
+        if (p_ptr->prace == RACE_MON_RING && p_ptr->riding)
+            r_ptr = &r_info[m_list[p_ptr->riding].r_idx];
+        if (p_ptr->prace == RACE_DRACONIAN && mut_present(MUT_DRACONIAN_METAMORPHOSIS))
+        {
+            switch(p_ptr->psubrace)
+            {
+            case DRACONIAN_RED: r_ptr = &r_info[644]; /* Ancient red dragon */
+            case DRACONIAN_WHITE: r_ptr = &r_info[617]; /* etc... */
+            case DRACONIAN_BLUE: r_ptr = &r_info[601];
+            case DRACONIAN_BLACK: r_ptr = &r_info[624];
+            case DRACONIAN_GREEN: r_ptr = &r_info[618];
+            case DRACONIAN_BRONZE: r_ptr = &r_info[MON_ANCIENT_BRONZE_DRAGON];
+            case DRACONIAN_GOLD: r_ptr = &r_info[MON_ANCIENT_GOLD_DRAGON];
+            case DRACONIAN_SHADOW: r_ptr = &r_info[MON_DEATH_DRAKE];
+            case DRACONIAN_CRYSTAL: r_ptr = &r_info[MON_GREAT_CRYSTAL_DRAKE];
+            }
+        }
     }
-    if (p_ptr->prace == RACE_MON_RING && p_ptr->riding)
-        r_ptr = &r_info[m_list[p_ptr->riding].r_idx];
+    else
+    {
+        r_ptr = &r_info[0];
+    }
 
     assert(r_ptr);
     *c = r_ptr->x_char;
@@ -1483,6 +1514,7 @@ void note_spot(int y, int x)
         p_ptr->window |= PW_OBJECT_LIST;
     }
 
+    c_ptr->info |= CAVE_AWARE;
 
     /* Hack -- memorize grids */
     if (!(c_ptr->info & (CAVE_MARK)))
@@ -1628,7 +1660,7 @@ void prt_map(void)
     /* Hide the cursor */
     (void)Term_set_cursor(0);
 
-    for (uip = rect_topleft(&map_rect); uip.y < map_rect.y + map_rect.cy; uip.y++)
+    for (uip = rect_topleft(map_rect); uip.y < map_rect.y + map_rect.cy; uip.y++)
     {
         if (msg_line_contains(uip.y, -1))
         {
@@ -1667,7 +1699,7 @@ void prt_map(void)
 /*
  * print project path
  */
-void prt_path(int y, int x)
+void prt_path(int y, int x, int xtra_flgs)
 {
     int i;
     int path_n;
@@ -1675,13 +1707,13 @@ void prt_path(int y, int x)
     int default_color = TERM_SLATE;
     int flgs = PROJECT_PATH|PROJECT_THRU;
 
+    flgs |= xtra_flgs;
+
     if (!display_path) return;
     if (-1 == project_length)
         return;
 
     /* Get projection path */
-    if (shoot_hack == SHOOT_DISINTEGRATE)
-        flgs |= PROJECT_DISI;
     path_n = project_path(path_g, (project_length ? project_length : MAX_RANGE), py, px, y, x, flgs);
 
     /* Redraw map */
@@ -1724,7 +1756,7 @@ void prt_path(int y, int x)
         }
 
         /* Known Wall */
-        if (shoot_hack != SHOOT_DISINTEGRATE)
+        if (!(flgs & PROJECT_DISI))
         {
             if ((c_ptr->info & CAVE_MARK) && !cave_have_flag_grid(c_ptr, FF_PROJECT)) break;
         }
@@ -2067,7 +2099,7 @@ void display_map(int *cy, int *cx)
           char buf[13] = "\0";
           strncpy(buf,autopick_list[match_autopick].name,12);
           buf[12] = '\0';
-          put_str(buf,y,0); 
+          put_str(buf,y,0);
       }
 #endif
 
@@ -2179,7 +2211,7 @@ void do_cmd_view_map(void)
                 break;
 
             Term_fresh();
-            
+
             if (~display_autopick & flag)
                 display_autopick |= flag;
             else
@@ -2187,7 +2219,7 @@ void do_cmd_view_map(void)
             /* Display the map */
             display_map(&cy, &cx);
         }
-        
+
         display_autopick = 0;
 
     }
@@ -4129,17 +4161,17 @@ static int scent_when = 0;
 /*
  * Characters leave scent trails for perceptive monsters to track.
  *
- * Smell is rather more limited than sound. Many creatures cannot use 
- * it at all, it doesn't extend very far outwards from the character's 
- * current position, and monsters can use it to home in the character, 
+ * Smell is rather more limited than sound. Many creatures cannot use
+ * it at all, it doesn't extend very far outwards from the character's
+ * current position, and monsters can use it to home in the character,
  * but not to run away from him.
  *
- * Smell is valued according to age. When a character takes his turn, 
- * scent is aged by one, and new scent of the current age is laid down. 
- * Speedy characters leave more scent, true, but it also ages faster, 
+ * Smell is valued according to age. When a character takes his turn,
+ * scent is aged by one, and new scent of the current age is laid down.
+ * Speedy characters leave more scent, true, but it also ages faster,
  * which makes it harder to hunt them down.
  *
- * Whenever the age count loops, most of the scent trail is erased and 
+ * Whenever the age count loops, most of the scent trail is erased and
  * the age of the remainder is recalculated.
  */
 void update_smell(void)
@@ -4148,7 +4180,7 @@ void update_smell(void)
     int y, x;
 
     /* Create a table that controls the spread of scent */
-    const int scent_adjust[5][5] = 
+    const int scent_adjust[5][5] =
     {
         { -1, 0, 0, 0,-1 },
         {  0, 1, 1, 1, 0 },
@@ -4227,6 +4259,7 @@ void map_area(int range)
             if (distance(py, px, y, x) > range) continue;
 
             c_ptr = &cave[y][x];
+            c_ptr->info |= CAVE_IN_MAP;
 
             /* Feature code (applying "mimic" field) */
             feat = get_feat_mimic(c_ptr);
@@ -4235,6 +4268,7 @@ void map_area(int range)
             /* All non-walls are "checked" */
             if (!have_flag(f_ptr->flags, FF_WALL))
             {
+                c_ptr->info |= CAVE_AWARE;
                 /* Memorize normal features */
                 if (have_flag(f_ptr->flags, FF_REMEMBER))
                 {
@@ -4255,7 +4289,7 @@ void map_area(int range)
                     if (have_flag(f_ptr->flags, FF_REMEMBER))
                     {
                         /* Memorize the walls */
-                        c_ptr->info |= (CAVE_MARK);
+                        c_ptr->info |= (CAVE_MARK | CAVE_AWARE);
                     }
                 }
             }
@@ -4335,6 +4369,8 @@ void wiz_lite(bool ninja)
 
                     /* Feature code (applying "mimic" field) */
                     f_ptr = &f_info[get_feat_mimic(c_ptr)];
+
+                    c_ptr->info |= CAVE_AWARE;
 
                     /* Perma-lite the grid */
                     if (!(d_info[dungeon_type].flags1 & DF1_DARKNESS) && !ninja)
@@ -4618,7 +4654,7 @@ int feat_state(int feat, int action)
 }
 
 /*
- * Takes a location and action and changes the feature at that 
+ * Takes a location and action and changes the feature at that
  * location through applying the given action.
  */
 void cave_alter_feat(int y, int x, int action)
@@ -4754,21 +4790,22 @@ void hit_mon_trap(int y, int x, int m_idx)
                     }
                     break;
                 case 5: /* Trap Door */
-                    if (r_ptr->flags7 & RF7_CAN_FLY)
+                    if (!quests_get_current() && !p_ptr->inside_arena)
                     {
-                        if (m_ptr->ml)
-                            msg_format("%s flies over the trap door.", m_name);
-                    }
-                    else
-                    {
-                        if (m_ptr->ml)
-                            msg_format("%s falls through the trap door.", m_name);
-                        if (p_ptr->inside_arena)
-                            msg_format("%s climbs back out to continue the fight!", m_name);
+                        if (r_ptr->flags7 & RF7_CAN_FLY)
+                        {
+                            if (m_ptr->ml)
+                                msg_format("%s flies over the trap door.", m_name);
+                        }
                         else
+                        {
+                            if (m_ptr->ml)
+                                msg_format("%s falls through the trap door.", m_name);
                             delete_monster_idx(m_idx);
+                        }
+                        break;
                     }
-                    break;
+                    /* vvv=== Fall Thru: No Trapdoors in the Arena or Fixed Town Quests */
                 case 6: case 7: case 8: case 9: /* Arrow Trap */
                     if (m_ptr->ml)
                         msg_format("%s is hit by an arrow.", m_name);
@@ -5131,8 +5168,8 @@ void disturb(int stop_search, int unused_flag)
     }
 
     /* Cancel Resting */
-    if ( p_ptr->action == ACTION_REST 
-      || p_ptr->action == ACTION_FISH 
+    if ( p_ptr->action == ACTION_REST
+      || p_ptr->action == ACTION_FISH
       || p_ptr->action == ACTION_GLITTER
       || (stop_search && p_ptr->action == ACTION_SEARCH) )
     {
@@ -5158,8 +5195,7 @@ void disturb(int stop_search, int unused_flag)
 
     if (travel.run)
     {
-        /* Cancel */
-        travel.run = 0;
+        travel_cancel();
 
         /* Check for new panel if appropriate */
         if (center_player && !center_running) viewport_verify();

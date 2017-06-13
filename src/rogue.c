@@ -79,15 +79,10 @@ static cptr _rogue_pick_pocket(int power)
                 stats_on_gold_find(loot.pval);
                 p_ptr->redraw |= (PR_GOLD);
             }
-            else if (!inven_carry_okay(&loot))
-            {
-                msg_format("You have no room for %s.", o_name);
-                drop_near(&loot, -1, y, x);
-            }
             else
             {
-                int slot = inven_carry(&loot);
-                msg_format("You steal %s (%c).", o_name, index_to_label(slot));
+                pack_carry(&loot);
+                msg_format("You steal %s.", o_name);
             }
         }
 
@@ -645,7 +640,7 @@ cptr do_burglary_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_DARK, dir, dam, rad);
             }
         }
@@ -655,7 +650,7 @@ cptr do_burglary_spell(int spell, int mode)
         if (name) return "Hide in Shadows";
         if (desc) return "You become shrouded in darkness, your torch light magically dimmed.";
         {
-            int d = p_ptr->lev;
+            int d = plev;
             if (info) return info_duration(spell_power(d), spell_power(d));
             if (cast)
             {
@@ -743,11 +738,8 @@ cptr do_burglary_spell(int spell, int mode)
  ****************************************************************************/
 static void _calc_shooter_bonuses(object_type *o_ptr, shooter_info_t *info_ptr)
 {
-    if ( !p_ptr->shooter_info.heavy_shoot
-      && p_ptr->shooter_info.tval_ammo == TV_SHOT )
-    {
-        p_ptr->shooter_info.num_fire += p_ptr->lev * 200 / 50;
-    }
+    if (p_ptr->shooter_info.tval_ammo != TV_SHOT )
+        p_ptr->shooter_info.base_shot = 100;
 }
 
 static void _calc_bonuses(void)
@@ -763,14 +755,35 @@ static caster_info * _caster_info(void)
     if (!init)
     {
         me.magic_desc = "spell";
-        me.which_stat = A_INT;
-        me.weight = 400;
-        me.min_level = 5;
-        me.min_fail = 5;
+        me.encumbrance.max_wgt = 400;
+        me.encumbrance.weapon_pct = 33;
+        me.encumbrance.enc_wgt = 1000;
         me.options = CASTER_GLOVE_ENCUMBRANCE;
         init = TRUE;
     }
+    if (p_ptr->realm1 == REALM_BURGLARY)
+    {
+        me.which_stat = A_DEX;
+        me.min_level = 1;
+        me.min_fail = 0;
+    }
+    else
+    {
+        me.which_stat = A_INT;
+        me.min_level = 5;
+        me.min_fail = 5;
+    }
     return &me;
+}
+
+static void _birth(void)
+{
+    py_birth_obj_aux(TV_SWORD, SV_DAGGER, 1);
+    py_birth_obj_aux(TV_SOFT_ARMOR, SV_SOFT_LEATHER_ARMOR, 1);
+    py_birth_obj_aux(TV_SCROLL, SV_SCROLL_TELEPORT, randint1(3));
+    py_birth_spellbooks();
+
+    p_ptr->au += 200;
 }
 
 /****************************************************************************
@@ -784,7 +797,7 @@ class_t *rogue_get_class(void)
     if (!init)
     {           /* dis, dev, sav, stl, srh, fos, thn, thb */
     skills_t bs = { 45,  37,  36,   5,  32,  24,  60,  66};
-    skills_t xs = { 15,  12,  10,   0,   0,   0,  21,  18};
+    skills_t xs = { 15,  12,  10,   0,   0,   0,  21,  20};
 
         me.name = "Rogue";
         me.desc = "A Rogue is a character that prefers to live by his cunning, but is "
@@ -794,8 +807,7 @@ class_t *rogue_get_class(void)
                     "allowing him to sneak around many creatures without having to "
                     "fight, or to get in a telling first blow. A rogue may also "
                     "backstab a fleeing monster. Rogues also gain shooting bonuses "
-                    "when using a sling. Intelligence determines a rogue's "
-                    "spell casting ability.\n \n"
+                    "when using a sling.\n \n"
                     "Rogues can select one realm from Sorcery, Death, Trump, Arcane, Craft, "
                     "or Burglary. Except for this last realm, rogues have certain limitations " 
                     "on which spells they can learn, and they do not learn new spells "
@@ -803,7 +815,10 @@ class_t *rogue_get_class(void)
                     "offers spells for setting traps, picking pockets, negotiating with "
                     "other thieves, and escaping from a tight spot. Burglary rogues are "
                     "agents of the Black Market and receive favorable pricing from "
-                    "that shop.";
+                    "that shop. A Burglary rogue uses DEX as their spellcasting stat, "
+                    "and may learn spells beginning at level 1. For other realms, however, "
+                    "the rogue uses INT as the spellcasting stat, and won't be able to "
+                    "learn spells until level 5.";
 
         me.stats[A_STR] =  2;
         me.stats[A_INT] =  1;
@@ -817,7 +832,10 @@ class_t *rogue_get_class(void)
         me.base_hp = 12;
         me.exp = 125;
         me.pets = 40;
+        me.flags = CLASS_SENSE1_FAST | CLASS_SENSE1_STRONG |
+                   CLASS_SENSE2_MED | CLASS_SENSE2_STRONG;
         
+        me.birth = _birth;
         me.calc_bonuses = _calc_bonuses;
         me.caster_info = _caster_info;
         me.calc_shooter_bonuses = _calc_shooter_bonuses;

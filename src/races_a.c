@@ -52,7 +52,7 @@ race_t *amberite_get_race(void)
         me.skills.srh =  3;
         me.skills.fos = 13;
         me.skills.thn = 15;
-        me.skills.thb = 10;
+        me.skills.thb =  7;
 
         me.life = 100;
         me.base_hp = 20;
@@ -155,7 +155,7 @@ void android_calc_exp(void)
 
     if (p_ptr->prace != RACE_ANDROID) return;
 
-    for (slot = EQUIP_BEGIN; slot < EQUIP_BEGIN + equip_count(); slot++)
+    for (slot = 1; slot <= equip_max(); slot++)
     {
         object_type *o_ptr = equip_obj(slot);
         total_exp += android_obj_exp(o_ptr);
@@ -228,6 +228,18 @@ static void _android_get_flags(u32b flgs[OF_ARRAY_SIZE])
     add_flag(flgs, OF_HOLD_LIFE);
     /*add_flag(flgs, TR_VULN_ELEC);*/
 }
+static void _android_birth(void)
+{
+    object_type forge = {0};
+    object_prep(&forge, lookup_kind(TV_FLASK, SV_ANY));
+    apply_magic(&forge, 1, AM_NO_FIXED_ART); /* Hack (pval->xtra4) */
+    forge.number = rand_range(7, 12);
+    py_birth_obj(&forge);
+
+    py_birth_light();
+
+    p_ptr->au /= 5;
+}
 race_t *android_get_race(void)
 {
     static race_t me = {0};
@@ -262,7 +274,7 @@ race_t *android_get_race(void)
         me.skills.srh =  3;
         me.skills.fos = 14;
         me.skills.thn = 20;
-        me.skills.thb = 10;
+        me.skills.thb =  6;
 
         me.life = 108;
         me.base_hp = 26;
@@ -271,6 +283,7 @@ race_t *android_get_race(void)
         me.shop_adjust = 120;
 
 
+        me.birth = _android_birth;
         me.calc_bonuses = _android_calc_bonuses;
         me.get_powers = _android_get_powers;
         me.get_flags = _android_get_flags;
@@ -324,7 +337,7 @@ race_t *archon_get_race(void)
         me.skills.srh =  2;
         me.skills.fos = 11;
         me.skills.thn = 10;
-        me.skills.thb = 10;
+        me.skills.thb =  7;
 
         me.life = 103;
         me.base_hp = 22;
@@ -369,6 +382,19 @@ static void _balrog_get_flags(u32b flgs[OF_ARRAY_SIZE])
     if (p_ptr->lev >= 10)
         add_flag(flgs, OF_SEE_INVIS);
 }
+static void _balrog_birth(void)
+{
+    int i, ct = rand_range(3, 4);
+    get_mon_num_prep(monster_hook_human, NULL);
+    for (i = 0; i < ct; i++)
+    {
+        object_type forge = {0};
+        object_prep(&forge, lookup_kind(TV_CORPSE, SV_CORPSE));
+        forge.pval = get_mon_num(2);
+        py_birth_obj(&forge);
+    }
+    py_birth_light();
+}
 race_t *balrog_get_race(void)
 {
     static race_t me = {0};
@@ -407,6 +433,7 @@ race_t *balrog_get_race(void)
         me.flags = RACE_IS_NONLIVING | RACE_IS_DEMON;
         me.shop_adjust = 140;
 
+        me.birth = _balrog_birth;
         me.calc_bonuses = _balrog_calc_bonuses;
         me.get_powers = _balrog_get_powers;
         me.get_flags = _balrog_get_flags;
@@ -463,7 +490,7 @@ race_t *barbarian_get_race(void)
         me.skills.srh = 1;
         me.skills.fos = 7;
         me.skills.thn = 12;
-        me.skills.thb = 10;
+        me.skills.thb =  6;
 
         me.life = 103;
         me.base_hp = 22;
@@ -501,6 +528,12 @@ static void _beastman_get_flags(u32b flgs[OF_ARRAY_SIZE])
     add_flag(flgs, OF_RES_SOUND);
     add_flag(flgs, OF_RES_CONF);
 }
+static void _beastman_birth(void)
+{
+    mut_gain_random(mut_good_pred);
+    py_birth_food();
+    py_birth_light();
+}
 race_t *beastman_get_race(void)
 {
     static race_t me = {0};
@@ -532,7 +565,7 @@ race_t *beastman_get_race(void)
         me.skills.srh = -1;
         me.skills.fos = 5;
         me.skills.thn = 12;
-        me.skills.thb = 5;
+        me.skills.thb = 3;
 
         me.life = 102;
         me.base_hp = 22;
@@ -540,6 +573,7 @@ race_t *beastman_get_race(void)
         me.infra = 0;
         me.shop_adjust = 130;
 
+        me.birth = _beastman_birth;
         me.calc_bonuses = _beastman_calc_bonuses;
         me.gain_level = _beastman_gain_level;
         me.get_flags = _beastman_get_flags;
@@ -557,6 +591,8 @@ static void _centaur_birth(void)
 {
     equip_on_change_race();
     skills_innate_init("Hooves", WEAPON_EXP_BEGINNER, WEAPON_EXP_MASTER);
+    py_birth_food();
+    py_birth_light();
 }
 
 void jump_spell(int cmd, variant *res)
@@ -691,7 +727,7 @@ race_t *centaur_get_race(void)
         me.skills.srh =  3;
         me.skills.fos =  5;
         me.skills.thn = 10;
-        me.skills.thb = 12;
+        me.skills.thb =  8;
 
         me.life = 103;
         me.base_hp = 22;
@@ -760,7 +796,7 @@ race_t *cyclops_get_race(void)
         me.skills.srh = -2;
         me.skills.fos =  5;
         me.skills.thn = 20;
-        me.skills.thb = 12;
+        me.skills.thb = 10;
 
         me.life = 108;
         me.base_hp = 24;
@@ -830,7 +866,7 @@ race_t *dark_elf_get_race(void)
         me.skills.srh = 8;
         me.skills.fos = 12;
         me.skills.thn = -5;
-        me.skills.thb = 10;
+        me.skills.thb =  6;
 
         me.life = 97;
         me.base_hp = 18;
@@ -956,7 +992,7 @@ static void _draconian_breathe_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (get_aim_dir(&dir))
+        if (get_fire_dir(&dir))
         {
             int e = _draconian_breath_effect();
             int dam = _draconian_breath_amount();
@@ -1128,6 +1164,7 @@ static int _draconian_attack_level(void)
     case CLASS_SCOUT:
     case CLASS_DEVICEMASTER:
     case CLASS_FORCETRAINER:
+    case CLASS_SKILLMASTER:
         /*l = MAX(1, l * 100 / 100);*/
         break;
     case CLASS_BARD:
@@ -1143,6 +1180,8 @@ static int _draconian_attack_level(void)
     case CLASS_TOURIST:
     case CLASS_MIRROR_MASTER:
     case CLASS_BLOOD_MAGE:
+    case CLASS_YELLOW_MAGE:
+    case CLASS_GRAY_MAGE:
         l = MAX(1, l * 80 / 100);
         break;
     case CLASS_SORCERER:
@@ -1302,7 +1341,7 @@ race_t *draconian_get_race(int psubrace)
         me.skills.srh = 1;
         me.skills.fos = 10;
         me.skills.thn = 5;
-        me.skills.thb = 5;
+        me.skills.thb = 3;
 
         me.infra = 2;
 
@@ -1488,7 +1527,7 @@ race_t *dunadan_get_race(void)
         me.skills.srh =  3;
         me.skills.fos = 13;
         me.skills.thn = 15;
-        me.skills.thb = 10;
+        me.skills.thb =  7;
 
         me.life = 100;
         me.base_hp = 20;
@@ -1537,8 +1576,8 @@ race_t *dwarf_get_race(void)
         me.desc = "Dwarves are the headstrong miners and fighters of legend. Dwarves tend to be stronger "
                     "and tougher but slower and less intelligent than humans. Because they are so headstrong "
                     "and are somewhat wise, they resist spells which are cast on them. They are very good "
-                    "at searching, perception, fighting, and bows. Dwarves  have miserable stealth. They "
-                    "can never be blinded.";
+                    "at searching, perception, fighting, and bows. Dwarves have miserable stealth. They "
+                    "resist being blinded.";
 
         me.stats[A_STR] =  2;
         me.stats[A_INT] = -2;
@@ -1593,6 +1632,11 @@ static void _ent_get_flags(u32b flgs[OF_ARRAY_SIZE])
 {
     /*add_flag(flgs, TR_VULN_FIRE);*/
 }
+static void _ent_birth(void)
+{
+    py_birth_obj_aux(TV_POTION, SV_POTION_WATER, rand_range(15, 23));
+    py_birth_light();
+}
 race_t *ent_get_race(void)
 {
     static race_t me = {0};
@@ -1605,7 +1649,8 @@ race_t *ent_get_race(void)
                     "animals or plants who inhabit Arda. Spirits of the land, they were summoned to "
                     "guard the forests of Middle-earth. Being much like trees they are very clumsy but "
                     "strong, and very susceptible to fire. They gain very little nutrition from the food "
-                    "of mortals, but they can absorb water from potions as their nutrition.";
+                    "of mortals, but they can absorb water from potions as their nutrition. Finally, they "
+                    "can summon the trees of the forest to their side.";
 
         me.skills.dis = -5;
         me.skills.dev =  2;
@@ -1614,7 +1659,7 @@ race_t *ent_get_race(void)
         me.skills.srh =  0;
         me.skills.fos =  9;
         me.skills.thn = 15;
-        me.skills.thb = -5;
+        me.skills.thb = -3;
 
         me.life = 105;
         me.base_hp = 25;
@@ -1622,6 +1667,7 @@ race_t *ent_get_race(void)
         me.infra = 0;
         me.shop_adjust = 95;
 
+        me.birth = _ent_birth;
         me.calc_bonuses = _ent_calc_bonuses;
         me.get_powers = _ent_get_powers;
         me.get_flags = _ent_get_flags;
@@ -1702,7 +1748,7 @@ race_t *gnome_get_race(void)
         me.skills.srh = 6;
         me.skills.fos = 13;
         me.skills.thn = -8;
-        me.skills.thb = 12;
+        me.skills.thb =  8;
 
         me.life = 95;
         me.base_hp = 16;
@@ -1757,6 +1803,11 @@ static void _golem_get_flags(u32b flgs[OF_ARRAY_SIZE])
     if (p_ptr->lev >= 16)
         add_flag(flgs, OF_DEC_SPEED);
 }
+static void _golem_birth(void)
+{
+    py_birth_obj_aux(TV_STAFF, EFFECT_NOTHING, 1);
+    py_birth_light();
+}
 race_t *golem_get_race(void)
 {
     static race_t me = {0};
@@ -1798,7 +1849,7 @@ race_t *golem_get_race(void)
         me.flags = RACE_IS_NONLIVING;
         me.shop_adjust = 120;
 
-
+        me.birth = _golem_birth;
         me.get_powers = _golem_get_powers;
         me.calc_bonuses = _golem_calc_bonuses;
         me.get_flags = _golem_get_flags;
@@ -1858,7 +1909,7 @@ race_t *half_giant_get_race(void)
         me.skills.srh = -1;
         me.skills.fos =  5;
         me.skills.thn = 25;
-        me.skills.thb =  5;
+        me.skills.thb =  3;
 
         me.life = 108;
         me.base_hp = 26;
@@ -2060,7 +2111,7 @@ race_t *half_troll_get_race(void)
         me.skills.srh = -1;
         me.skills.fos =  5;
         me.skills.thn = 20;
-        me.skills.thb =-10;
+        me.skills.thb = -6;
 
         me.life = 107;
         me.base_hp = 25;
@@ -2119,7 +2170,7 @@ race_t *high_elf_get_race(void)
         me.skills.srh =  3;
         me.skills.fos = 14;
         me.skills.thn = 10;
-        me.skills.thb = 25;
+        me.skills.thb = 15;
 
         me.life = 99;
         me.base_hp = 19;
@@ -2175,7 +2226,7 @@ race_t *hobbit_get_race(void)
         me.skills.srh = 12;
         me.skills.fos = 15;
         me.skills.thn = -10;
-        me.skills.thb = 20;
+        me.skills.thb = 10;
 
         me.life = 92;
         me.base_hp = 14;
@@ -2305,7 +2356,7 @@ race_t *imp_get_race(void)
         me.skills.srh = -1;
         me.skills.fos = 10;
         me.skills.thn = 5;
-        me.skills.thb = -5;
+        me.skills.thb = -3;
 
         me.life = 99;
         me.base_hp = 19;

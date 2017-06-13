@@ -759,6 +759,7 @@ static void _doc_process_var(doc_ptr doc, cptr name)
     if (strcmp(name, "version") == 0)
     {
         string_ptr s = string_alloc_format("%d.%d.%d", VER_MAJOR, VER_MINOR, VER_PATCH);
+        if (VER_MINOR == 0) string_append_s(s, "<color:r> (Beta)</color>");
         doc_insert(doc, string_buffer(s));
         string_free(s);
     }
@@ -1513,6 +1514,27 @@ void doc_clear(doc_ptr doc)
     doc_rollback(doc, doc_pos_create(0, 0));
 }
 
+void doc_sync_menu(doc_ptr doc)
+{
+    rect_t mr = ui_doc_menu_rect();
+    rect_t dr = mr;
+
+    dr.cx = doc_width(doc);
+    dr.cy = doc_cursor(doc).y + 1;
+    /* Try to draw a shadow */
+    if (dr.cy >= mr.cy - 1)
+        doc_sync_term(doc, doc_range_top_lines(doc, mr.cy), doc_pos_create(mr.x, mr.y));
+    else
+    {
+        rect_t sr = dr;
+        if (sr.cx < mr.cx) sr.cx++;
+        sr.cy = dr.cy + 1;
+        Term_clear_rect(sr);
+        doc_sync_term(doc, doc_range_all(doc), doc_pos_create(dr.x, dr.y));
+    }
+
+}
+
 void doc_sync_term(doc_ptr doc, doc_region_t range, doc_pos_t term_pos)
 {
     doc_pos_t pos;
@@ -1600,13 +1622,14 @@ int doc_display_aux(doc_ptr doc, cptr caption, int top, rect_t display)
         int cmd;
 
         Term_erase(display.x, display.y, display.cx);
-        put_str(format("[%s, Line %d/%d]", caption, top, doc->cursor.y), display.y, display.x);
+        c_put_str(TERM_L_GREEN, format("[%s, Line %d/%d]", caption, top, doc->cursor.y), display.y, display.x);
         doc_sync_term(doc, doc_region_create(0, top, doc->width, top + page_size - 1), doc_pos_create(display.x, display.y + 2));
         Term_erase(display.x, display.y + display.cy - 1, display.cx);
-        put_str("[Press ESC to exit. Press ? for help]", display.y + display.cy - 1, display.x);
+        c_put_str(TERM_L_GREEN, "[Press ESC to exit. Press ? for help]", display.y + display.cy - 1, display.x);
 
         cmd = inkey_special(TRUE);
 
+        /* links */
         if ('a' <= cmd && cmd <= 'z')
         {
             doc_link_ptr link = int_map_find(doc->links, cmd);
@@ -1615,6 +1638,37 @@ int doc_display_aux(doc_ptr doc, cptr caption, int top, rect_t display)
                 rc = doc_display_help_aux(string_buffer(link->file), string_buffer(link->topic), display);
                 if (rc == _UNWIND)
                     done = TRUE;
+                continue;
+            }
+        }
+
+        /* vi like movement for roguelike keyset */
+        if (rogue_like_commands)
+        {
+            if (cmd == 'j')
+            {
+                top++;
+                if (top > doc->cursor.y - page_size)
+                    top = MAX(0, doc->cursor.y - page_size);
+                continue;
+            }
+            else if (cmd == 'k')
+            {
+                top--;
+                if (top < 0) top = 0;
+                continue;
+            }
+            else if (cmd == KTRL('F'))
+            {
+                top += page_size;
+                if (top > doc->cursor.y - page_size)
+                    top = MAX(0, doc->cursor.y - page_size);
+                continue;
+            }
+            else if (cmd == KTRL('B'))
+            {
+                top -= page_size;
+                if (top < 0) top = 0;
                 continue;
             }
         }

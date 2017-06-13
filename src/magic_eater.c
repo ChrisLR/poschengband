@@ -18,6 +18,9 @@ static void _birth(void)
         memset(&_staves[i], 0, sizeof(object_type));
         memset(&_rods[i], 0, sizeof(object_type));
     }
+    py_birth_obj_aux(TV_WAND, EFFECT_BOLT_MISSILE, 1);
+    py_birth_obj_aux(TV_SWORD, SV_SHORT_SWORD, 1);
+    py_birth_obj_aux(TV_SOFT_ARMOR, SV_SOFT_LEATHER_ARMOR, 1);
 }
 
 static object_type *_which_list(int tval)
@@ -54,7 +57,7 @@ static void _display(object_type *list, rect_t display)
 {
     char    buf[MAX_NLEN];
     int     i;
-    point_t pos = rect_topleft(&display);
+    point_t pos = rect_topleft(display);
     int     padding, max_o_len = 20;
     doc_ptr doc = NULL;
 
@@ -113,7 +116,7 @@ static void _display(object_type *list, rect_t display)
 #define _ALLOW_EMPTY    0x01 /* Absorb */
 #define _ALLOW_SWITCH   0x02 /* Browse/Use */
 #define _ALLOW_EXCHANGE 0x04
-object_type *_choose(cptr verb, int tval, int options)
+static object_type *_choose(cptr verb, int tval, int options)
 {
     object_type *result = NULL;
     int          slot = 0;
@@ -254,7 +257,7 @@ object_type *_choose(cptr verb, int tval, int options)
     return result;
 }
 
-void _use_object(object_type *o_ptr)
+static void _use_object(object_type *o_ptr)
 {
     int  boost = device_power(100) - 100;
     u32b flgs[OF_ARRAY_SIZE];
@@ -285,6 +288,7 @@ void _use_object(object_type *o_ptr)
     {
         if (flush_failure) flush();
         msg_print("The device has no charges left.");
+        energy_use = 0;
         return;
     }
 
@@ -357,21 +361,20 @@ void magic_eater_cast(int tval)
 /* Absorb Magic */
 static bool gain_magic(void)
 {
-    int item;
-    object_type *src_ptr;
+    obj_prompt_t prompt = {0};
     object_type *dest_ptr;
     char o_name[MAX_NLEN];
 
-    item_tester_hook = object_is_device;
-    if (!get_item(&item, "Gain power of which item? ", "You have nothing to gain power from.", (USE_INVEN | USE_FLOOR)))
-        return FALSE;
+    prompt.prompt = "Gain power of which item?";
+    prompt.error = "You have nothing to gain power from.";
+    prompt.filter = object_is_device;
+    prompt.where[0] = INV_PACK;
+    prompt.where[1] = INV_FLOOR;
 
-    if (item >= 0)
-        src_ptr = &inventory[item];
-    else
-        src_ptr = &o_list[0 - item];
+    obj_prompt(&prompt);
+    if (!prompt.obj) return FALSE;
 
-    dest_ptr = _choose("Replace", src_ptr->tval, _ALLOW_EMPTY);
+    dest_ptr = _choose("Replace", prompt.obj->tval, _ALLOW_EMPTY);
     if (!dest_ptr)
         return FALSE;
 
@@ -384,29 +387,19 @@ static bool gain_magic(void)
             return FALSE;
     }
 
-    object_desc(o_name, src_ptr, OD_COLOR_CODED);
+    object_desc(o_name, prompt.obj, OD_COLOR_CODED);
     msg_format("You absorb magic of %s.", o_name);
 
-    *dest_ptr = *src_ptr;
+    *dest_ptr = *prompt.obj;
 
+    dest_ptr->loc.where = 0;
+    dest_ptr->loc.slot = 0;
     dest_ptr->inscription = 0;
     obj_identify_fully(dest_ptr);
     stats_on_identify(dest_ptr);
 
-    /* Eliminate the item (from the pack) */
-    if (item >= 0)
-    {
-        inven_item_increase(item, -999);
-        inven_item_describe(item);
-        inven_item_optimize(item);
-    }
-    /* Eliminate the item (from the floor) */
-    else
-    {
-        floor_item_increase(0 - item, -999);
-        floor_item_describe(0 - item);
-        floor_item_optimize(0 - item);
-    }
+    prompt.obj->number = 0;
+    obj_release(prompt.obj, 0);
     return TRUE;
 }
 
@@ -636,7 +629,7 @@ static void _load_list(savefile_ptr file, object_type *which_list)
         if (i == 0xFFFF) break;
         assert(0 <= i && i < _MAX_SLOTS);
         o_ptr = which_list + i;
-        rd_item(file, o_ptr);
+        obj_load(o_ptr, file);
         assert(o_ptr->k_idx);
     }
 }
@@ -657,7 +650,7 @@ static void _save_list(savefile_ptr file, object_type *which_list)
         if (o_ptr->k_idx)
         {
             savefile_write_u16b(file, (u16b)i);
-            wr_item(file, o_ptr);
+            obj_save(o_ptr, file);
         }
     }
     savefile_write_u16b(file, 0xFFFF); /* sentinel */
@@ -723,6 +716,8 @@ class_t *magic_eater_get_class(void)
         me.base_hp = 6;
         me.exp = 130;
         me.pets = 30;
+        me.flags = CLASS_SENSE1_MED | CLASS_SENSE1_WEAK |
+                   CLASS_SENSE2_FAST | CLASS_SENSE2_STRONG;
 
         me.birth = _birth;
         me.get_powers = _get_powers;

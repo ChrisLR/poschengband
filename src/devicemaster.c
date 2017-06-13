@@ -63,8 +63,8 @@ bool _detect_devices(int range)
         if (!o_ptr->k_idx) continue;
         if (o_ptr->held_m_idx) continue;
 
-        y = o_ptr->iy;
-        x = o_ptr->ix;
+        y = o_ptr->loc.y;
+        x = o_ptr->loc.x;
 
         if (distance(py, px, y, x) > range) continue;
 
@@ -187,40 +187,61 @@ static bool _transfer_obj_p(object_type *o_ptr)
     return FALSE;
 }
 
+static obj_ptr _get_src_obj(void)
+{
+    obj_prompt_t prompt = {0};
+
+    _transfer_src_obj = NULL;
+
+    prompt.prompt = "Transfer from which item?";
+    prompt.error = "You have no source items to use.";
+    prompt.filter = _transfer_obj_p;
+    prompt.where[0] = INV_PACK;
+
+    obj_prompt(&prompt);
+    return prompt.obj;
+}
+
+static obj_ptr _get_dest_obj(obj_ptr src_obj)
+{
+    obj_prompt_t prompt = {0};
+
+    _transfer_src_obj = src_obj;
+
+    prompt.prompt = "Transfer to which item?";
+    prompt.error = "You have no destination items to use.";
+    prompt.filter = _transfer_obj_p;
+    prompt.where[0] = INV_PACK;
+
+    obj_prompt(&prompt);
+    return prompt.obj;
+}
+
 static bool _transfer_effect(void)
 {
-    int src_idx = 0, dest_idx = 0;
-    object_type *src_obj = NULL, *dest_obj = NULL;
+    obj_ptr src_obj, dest_obj;
 
     /* Choose the objects */
-    _transfer_src_obj = NULL;
-    item_tester_hook = _transfer_obj_p;
-    if (!get_item(&src_idx, "Transfer from which item? ", "You have no items to use.", USE_INVEN)) return FALSE;
-    src_obj = &inventory[src_idx];
-
+    src_obj = _get_src_obj();
+    if (!src_obj) return FALSE;
     if (object_is_artifact(src_obj))
     {
         msg_print("Failed! You cannot transfer from artifacts.");
         return FALSE;
     }
 
-    _transfer_src_obj = src_obj;
-    item_tester_hook = _transfer_obj_p;
-    if (!get_item(&dest_idx, "Transfer to which item? ", "You have no items to use.", USE_INVEN)) return FALSE;
-    dest_obj = &inventory[dest_idx];
-
+    dest_obj = _get_dest_obj(src_obj);
+    if (!dest_obj) return FALSE;
     if (dest_obj == src_obj)
     {
         msg_print("Failed! Please pick distinct objects for the source and destination.");
         return FALSE;
     }
-
     if (object_is_artifact(dest_obj))
     {
         msg_print("Failed! You cannot transfer to artifacts.");
         return FALSE;
     }
-
     if (device_level(dest_obj) < src_obj->activation.difficulty)
     {
         msg_print("Failed! The destination device is not powerful enough to receive the source effect.");
@@ -235,34 +256,26 @@ static bool _transfer_effect(void)
 
     /* Destroy the source */
     assert(src_obj->number == 1); /* Wands/Rods/Staves no longer stack */
-    inven_item_increase(src_idx, -1);
-    inven_item_describe(src_idx);
-    inven_item_optimize(src_idx);
+    src_obj->number = 0;
+    obj_release(src_obj, 0);
 
-    p_ptr->notice |= (PN_COMBINE | PN_REORDER);
-    p_ptr->window |= (PW_INVEN | PW_EQUIP);
     return TRUE;
 }
 
 static bool _transfer_essence(void)
 {
     int tval = _speciality_tval(p_ptr->psubclass);
-    int src_idx = 0, dest_idx = 0;
     object_type *src_obj = NULL, *dest_obj = NULL;
     object_kind *src_kind = NULL, *dest_kind = NULL;
     int src_charges = 0, dest_charges = 0, max_charges = 0, power = 0;
 
     /* Choose the objects */
-    _transfer_src_obj = NULL;
-    item_tester_hook = _transfer_obj_p;
-    if (!get_item(&src_idx, "Transfer from which item? ", "You have no items to use.", USE_INVEN)) return FALSE;
-    src_obj = &inventory[src_idx];
+    src_obj = _get_src_obj();
+    if (!src_obj) return FALSE;
     src_kind = &k_info[src_obj->k_idx];
 
-    _transfer_src_obj = src_obj;
-    item_tester_hook = _transfer_obj_p;
-    if (!get_item(&dest_idx, "Transfer to which item? ", "You have no items to use.", USE_INVEN)) return FALSE;
-    dest_obj = &inventory[dest_idx];
+    dest_obj = _get_dest_obj(src_obj);
+    if (!dest_obj) return FALSE;
     dest_kind = &k_info[dest_obj->k_idx];
 
     if (dest_obj == src_obj)
@@ -270,7 +283,6 @@ static bool _transfer_essence(void)
         msg_print("Failed! Please pick distinct objects for the source and destination.");
         return FALSE;
     }
-
     if (tval == TV_SCROLL || tval == TV_POTION)
     {
         if (dest_kind->level > src_kind->level) /* Double Check ... should already be excluded! */
@@ -302,17 +314,12 @@ static bool _transfer_essence(void)
         return FALSE;
     }
 
-    /* Perform the transfer: Add to dest first as the inventory may shuffle after decreasing the source. */
-    inven_item_increase(dest_idx, dest_charges);
-    inven_item_describe(dest_idx);
-    inven_item_optimize(dest_idx);
+    /* Perform the transfer */
+    dest_obj->number += dest_charges;
+    src_obj->number -= src_charges;
 
-    inven_item_increase(src_idx, -src_charges);
-    inven_item_describe(src_idx);
-    inven_item_optimize(src_idx);
-
-    p_ptr->notice |= (PN_COMBINE | PN_REORDER);
-    p_ptr->window |= (PW_INVEN | PW_EQUIP);
+    obj_release(dest_obj, 0);
+    obj_release(src_obj, 0);
     return TRUE;
 }
 void _transfer_charges_spell(int cmd, variant *res)
@@ -412,29 +419,32 @@ static void _birth(void)
     case DEVICEMASTER_RODS:
         object_prep(&forge, lookup_kind(TV_ROD, SV_ANY));
         if (device_init_fixed(&forge, EFFECT_DETECT_MONSTERS))
-            add_outfit(&forge);
+            py_birth_obj(&forge);
         break;
     case DEVICEMASTER_STAVES:
         object_prep(&forge, lookup_kind(TV_STAFF, SV_ANY));
         if (device_init_fixed(&forge, EFFECT_SLEEP_MONSTERS))
-            add_outfit(&forge);
+            py_birth_obj(&forge);
         break;
     case DEVICEMASTER_WANDS:
         object_prep(&forge, lookup_kind(TV_WAND, SV_ANY));
         if (device_init_fixed(&forge, EFFECT_SLEEP_MONSTER))
-            add_outfit(&forge);
+            py_birth_obj(&forge);
         break;
     case DEVICEMASTER_POTIONS:
         object_prep(&forge, lookup_kind(TV_POTION, SV_POTION_SPEED));
         forge.number = 6;
-        add_outfit(&forge);
+        py_birth_obj(&forge);
         break;
     case DEVICEMASTER_SCROLLS:
         object_prep(&forge, lookup_kind(TV_SCROLL, SV_SCROLL_TELEPORT));
         forge.number = 6;
-        add_outfit(&forge);
+        py_birth_obj(&forge);
         break;
     }
+    py_birth_obj_aux(TV_SOFT_ARMOR, SV_SOFT_LEATHER_ARMOR, 1);
+    py_birth_obj_aux(TV_SWORD, SV_SHORT_SWORD, 1);
+    py_birth_obj_aux(TV_WAND, EFFECT_BOLT_MISSILE, 1);
 }
 
 static void _character_dump(doc_ptr doc)
@@ -473,13 +483,15 @@ static caster_info * _caster_info(void)
     {
         me.which_stat = A_INT;
         me.magic_desc = "talent";
-        me.weight = 3000;
+        me.encumbrance.max_wgt = 1000;
+        me.encumbrance.weapon_pct = 0;
+        me.encumbrance.enc_wgt = 1200;
         init = TRUE;
     }
     return &me;
 }
 
-class_t *devicemaster_get_class(void)
+class_t *devicemaster_get_class(int psubclass)
 {
     static class_t me = {0};
     static bool init = FALSE;
@@ -521,6 +533,8 @@ class_t *devicemaster_get_class(void)
         me.base_hp = 6;
         me.exp = 130;
         me.pets = 30;
+        me.flags = CLASS_SENSE1_MED | CLASS_SENSE1_WEAK |
+                   CLASS_SENSE2_FAST | CLASS_SENSE2_STRONG;
 
         me.birth = _birth;
         me.get_spells = _get_spells;
@@ -529,6 +543,7 @@ class_t *devicemaster_get_class(void)
         init = TRUE;
     }
 
-    me.subname = devicemaster_speciality_name(p_ptr->psubclass);
+    me.subname = devicemaster_speciality_name(psubclass);
+    me.subdesc = devicemaster_speciality_desc(psubclass);
     return &me;
 }

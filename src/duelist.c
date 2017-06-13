@@ -12,13 +12,13 @@ cptr _equip_error(void)
     if (wgt > (100 + (p_ptr->lev * 4)))
         return "The weight of your equipment is disrupting your talents.";
 
-    if (equip_find_object(TV_SHIELD, SV_ANY) || equip_find_object(TV_CAPTURE, SV_ANY))
+    if (equip_find_obj(TV_SHIELD, SV_ANY) || equip_find_obj(TV_CAPTURE, SV_ANY))
         return "Your shield is disrupting your talents.";
 
     if (p_ptr->weapon_ct > 1)
         return "Dual wielding is disrupting your talents.";
 
-    if (equip_find_object(TV_SWORD, SV_POISON_NEEDLE))
+    if (equip_find_obj(TV_SWORD, SV_POISON_NEEDLE))
         return "The Poison Needle is not an honorable dueling weapon.";
 
     if (p_ptr->anti_magic)
@@ -584,10 +584,16 @@ static caster_info * _caster_info(void)
     {
         me.magic_desc = "challenge";
         me.options = CASTER_USE_HP;
-        me.weight = 500;
         init = TRUE;
     }
     return &me;
+}
+
+static void _birth(void)
+{
+    py_birth_obj_aux(TV_SWORD, SV_RAPIER, 1);
+    py_birth_obj_aux(TV_SOFT_ARMOR, SV_SOFT_LEATHER_ARMOR, 1);
+    py_birth_obj_aux(TV_POTION, SV_POTION_SPEED, 1);
 }
 
 class_t *duelist_get_class(void)
@@ -598,8 +604,8 @@ class_t *duelist_get_class(void)
     /* static info never changes */
     if (!init)
     {           /* dis, dev, sav, stl, srh, fos, thn, thb */
-    skills_t bs = { 30,  33,  23,   3,  22,  16,  50,   0};
-    skills_t xs = { 10,  11,  10,   0,   0,   0,  14,   0};
+    skills_t bs = { 30,  24,  23,   3,  22,  16,  50,   0};
+    skills_t xs = { 10,  10,  10,   0,   0,   0,  14,   0};
 
         me.name = "Duelist";
         me.desc = "The duelist is the ultimate one-on-one fighter, but finds himself at a severe "
@@ -630,7 +636,9 @@ class_t *duelist_get_class(void)
         me.base_hp = 4;
         me.exp = 150;
         me.pets = 35;
+        me.flags = CLASS_SENSE1_FAST | CLASS_SENSE1_STRONG;
 
+        me.birth = _birth;
         me.calc_bonuses = _calc_bonuses;
         me.calc_weapon_bonuses = _calc_weapon_bonuses;
         me.caster_info = _caster_info;

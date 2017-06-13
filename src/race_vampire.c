@@ -32,17 +32,17 @@ static void _birth(void)
     equip_on_change_race();
     
     object_prep(&forge, lookup_kind(TV_SOFT_ARMOR, SV_LEATHER_SCALE_MAIL));
-    add_outfit(&forge);
+    py_birth_obj(&forge);
 
     object_prep(&forge, lookup_kind(TV_SWORD, SV_DAGGER));
     forge.name2 = EGO_WEAPON_DEATH;
-    add_outfit(&forge);
+    py_birth_obj(&forge);
 
     /* Encourage shapeshifting! */
     object_prep(&forge, lookup_kind(TV_RING, 0));
     forge.name2 = EGO_RING_COMBAT;
     forge.to_d = 4;
-    add_outfit(&forge);
+    py_birth_obj(&forge);
 }
 
 static void _gain_level(int new_level) 
@@ -176,7 +176,7 @@ void _gaze_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         fire_ball(GF_DOMINATION, dir, _gaze_power(), 0);
         var_set_bool(res, TRUE);
         break;
@@ -245,31 +245,23 @@ void _grasp_spell(int cmd, variant *res)
 
 void equip_shuffle(cptr tag)
 {
-    int i;
-    for (i = INVEN_PACK - 1; i >= 0; i--)
+    slot_t slot, equip_slot;
+    for (slot = 1; slot <= pack_max(); slot++)
     {
-        object_type *o_ptr = &inventory[i];
-        cptr         inscription;
-        int          slot;
+        obj_ptr obj = pack_obj(slot);
+        cptr    inscription;
 
-        if (!o_ptr->k_idx) continue;
-        if (!o_ptr->inscription) continue;
+        if (!obj) continue;
+        if (!obj->inscription) continue;
         
-        inscription = quark_str(o_ptr->inscription);
+        inscription = quark_str(obj->inscription);
         if (!strstr(inscription, tag)) continue;
         
-        slot = equip_first_empty_slot(o_ptr);
-        if (slot && o_ptr->number == 1)
+        equip_slot = equip_first_empty_slot(obj);
+        if (equip_slot)
         {
-            object_type copy;
-
-            object_copy(&copy, o_ptr);
-            copy.number = 1;
-
-            inven_item_increase(i, -1);
-            inven_item_optimize(i);
-
-            equip_wield_aux(&copy, slot);
+            equip_wield(obj, equip_slot);
+            obj_release(obj, OBJ_RELEASE_QUIET);
         }
     }
 }
@@ -429,7 +421,9 @@ static caster_info * _caster_info(void)
     {
         me.magic_desc = "dark power";
         me.which_stat = A_CHR;
-        me.weight = 450;
+        me.encumbrance.max_wgt = 450;
+        me.encumbrance.weapon_pct = 50;
+        me.encumbrance.enc_wgt = 800;
         init = TRUE;
     }
     return &me;
@@ -452,7 +446,7 @@ static void _calc_bonuses(void)
     p_ptr->hold_life = TRUE;
     p_ptr->see_nocto = TRUE;
 
-    if (equip_find_artifact(ART_NIGHT))
+    if (equip_find_art(ART_NIGHT))
     {
         p_ptr->dec_mana = TRUE;
         p_ptr->easy_spell = TRUE;
@@ -575,6 +569,11 @@ race_t *mon_vampire_get_race(void)
 
     me.equip_template = mon_get_equip_template();
 
+    if (birth_hack || spoiler_hack)
+    {
+        me.subname = NULL;
+        me.subdesc = NULL;
+    }
     return &me;
 }
 

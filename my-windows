@@ -1,0 +1,17 @@
+#!/bin/sh
+
+./autogen.sh
+./my-configure mingw
+make clean
+make -j4
+cp src/poschengband.exe .
+if [ -n "$1" ]
+then
+    file=poschengband-"$1".zip
+else
+    file=poschengband-"$(git describe)".zip
+fi
+
+rm $file
+find ./lib -name Makefile -prune -o -name .deps -prune -o -print | zip $file -@
+zip $file poschengband.exe readme.txt

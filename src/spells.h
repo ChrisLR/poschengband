@@ -2,6 +2,7 @@
 extern void browse_spells(spell_info* spells, int ct, cptr desc);
 extern int calculate_cost(int cost);
 extern int calculate_fail_rate(int level, int base_fail, int stat_idx);
+extern int calculate_fail_rate_aux(int caster_lvl, int spell_lvl, int base_fail, int stat_idx);
 extern bool cast_spell(ang_spell spell);
 extern int  choose_spell(spell_info* spells, int ct, cptr desc, int max_cost);
 extern void default_spell(int cmd, variant *res);
@@ -13,6 +14,7 @@ extern int get_spell_energy(ang_spell spell);
 extern int get_spell_cost_extra(ang_spell spell);
 extern int get_spell_fail_min(ang_spell spell);
 extern cptr get_spell_name(ang_spell spell); /* buffer reset on each call */
+extern cptr get_spell_stat_name(ang_spell spell); /* buffer reset on each call */
 extern cptr get_spell_desc(ang_spell spell); /* buffer reset on each call */
 extern cptr get_spell_spoiler_name(ang_spell spell); /* buffer reset on each call */
 extern void spell_stats_on_birth(void);
@@ -20,16 +22,18 @@ extern void spell_stats_on_load(savefile_ptr file);
 extern void spell_stats_on_save(savefile_ptr file);
 extern void spell_stats_on_learn(spell_info *spell, int max_skill);
 extern void spell_stats_on_cast(spell_info *spell);
-extern void spell_stats_gain_skill(spell_info *spell);
 extern void spell_stats_on_fail(spell_info *spell);
 extern spell_stats_ptr spell_stats_aux(cptr name);
 extern spell_stats_ptr spell_stats(spell_info *spell);
 extern int spell_stats_fail(spell_stats_ptr stats);
+extern void spellbook_destroy(obj_ptr obj);
 
 extern spell_stats_ptr spell_stats_old(int realm, int spell); /* Deprecated */
 extern void spell_stats_on_cast_old(int realm, int spell); /* Deprecated */
 extern void spell_stats_on_fail_old(int realm, int spell); /* Deprecated */
 
+
+extern void spellbook_character_dump(doc_ptr doc);
 
 /* Public Spells:  I'm using the following system for placing code.
    This makes it easier to split a too large file, and easier to locate

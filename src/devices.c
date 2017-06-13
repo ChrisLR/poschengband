@@ -35,27 +35,51 @@ static bool ang_sort_comp_pet(vptr u, vptr v, int a, int b)
 /* Devices: We are following the do_spell() pattern which is quick and dirty,
    but not my preferred approach ... */
 
-/* Fail Rates ... Scaled by 10 (95.2% returned as 952) */
-int  effect_calc_fail_rate(effect_t *effect)
+/* Fail Rates ... Scaled by 10 (95.2% returned as 952)
+ * cf design/devices.ods */
+int _difficulty(int d)
 {
-    int chance, fail;
+    /* A non-linear difficulty protects the high level end game
+     * devices from inappropriate usage. -Rockets are now much
+     * harder to use (and _Healing only marginally more difficult).
+     * Formerly, OF_MAGIC_MASTERY was useless to device classes
+     * like the mage. No longer! 100 -> 130, but with cubic weighting. */
+    return d + 30 * d * d / 100 * d / 10000;
+}
+/* in progress: I find this calculation hard to grok ... let's
+ * rephrase in terms of skill vs. difficulty and expose a simple
+ * api so I can view fail(s,d) (a function of 2 variables).
+ * cf ^A"d for online spoiler tables (wizard1.c) */
+int device_calc_fail_rate_aux(int skill, int difficulty)
+{
+    int min = USE_DEVICE;
+    int fail = 0;
+    difficulty = _difficulty(difficulty);
+    if (skill > difficulty) difficulty -= (skill - difficulty)*2;
+    else skill -= (difficulty - skill)*2;
+    if (difficulty < min) difficulty = min;
+    if (skill < min) skill = min;
+    if (skill > difficulty)
+        fail = difficulty * 500 / skill;
+    else
+        fail = 1000 - skill * 500 / difficulty;
+    return fail;
+}
+
+int effect_calc_fail_rate(effect_t *effect)
+{
+    int skill = p_ptr->skills.dev;
+    int fail;
 
     if (p_ptr->pclass == CLASS_BERSERKER) return 1000;
 
-    chance = p_ptr->skills.dev;
-    if (p_ptr->confused) chance = chance / 2;
-    if (p_ptr->stun) chance = chance * 2 / 3;
+    if (p_ptr->confused) skill = 3 * skill / 4;
+    if (p_ptr->stun) skill = 4 * skill / 5; /* XXX vary with amount of stunning */
 
-    fail = effect->difficulty;
-    if (chance > fail) fail -= (chance - fail)*2;
-    else chance -= (fail - chance)*2;
-    if (fail < USE_DEVICE) fail = USE_DEVICE;
-    if (chance < USE_DEVICE) chance = USE_DEVICE;
-
-    if (chance > fail)
-        return fail * 1000 / (chance*2);
-    else
-        return 1000 - chance * 1000 / (fail*2);
+    fail = device_calc_fail_rate_aux(skill, effect->difficulty);
+    if (p_ptr->stun > 50 && fail < 250) fail = 250;
+    else if (p_ptr->stun && fail < 150) fail = 150;
+    return fail;
 }
 
 int device_calc_fail_rate(object_type *o_ptr)
@@ -69,7 +93,7 @@ int device_calc_fail_rate(object_type *o_ptr)
 
         obj_flags(o_ptr, flgs);
         if (have_flag(flgs, OF_EASY_SPELL))
-            effect.difficulty -= effect.difficulty * o_ptr->pval / 10;
+            effect.difficulty -= MAX(o_ptr->pval, effect.difficulty * 10 * o_ptr->pval / 300);
 
         if (o_ptr->curse_flags & OFC_CURSED)
             effect.difficulty += effect.difficulty / 5;
@@ -90,6 +114,8 @@ int device_calc_fail_rate(object_type *o_ptr)
         fail = (USE_DEVICE-1)*1000/chance;
 
     if (o_ptr->tval == TV_SCROLL && fail > 500) fail = 500;
+    if (p_ptr->stun > 50 && fail < 250) fail = 250;
+    else if (p_ptr->stun && fail < 150) fail = 150;
 
     return fail;
 }
@@ -111,94 +137,89 @@ int  device_extra_power = 0;
    It's ugly, but worthwhile! */
 int  device_available_charges = 0; /* How many can we do? */
 int  device_used_charges = 0;      /* How many did we do? */
+static bool _use_charges = FALSE;
 
-static bool _do_identify_hook(object_type *o_ptr)
+static void _do_identify_aux(obj_ptr obj)
 {
-    if (!object_is_known(o_ptr))
-        return TRUE;
-    return FALSE;
+    char name[MAX_NLEN];
+    bool old_known;
+
+    if (_use_charges && device_used_charges >= device_available_charges) return;
+
+    old_known = identify_item(obj);
+    object_desc(name, obj, OD_COLOR_CODED);
+    switch (obj->loc.where)
+    {
+    case INV_EQUIP:
+        msg_format("%^s: %s (%c).", equip_describe_slot(obj->loc.slot),
+                name, slot_label(obj->loc.slot));
+        break;
+/* case INV_PACK:
+        msg_format("In your pack: %s.", name);
+        break;
+    case INV_QUIVER:
+        msg_format("In your quiver: %s.", name);
+        break;*/
+    case INV_PACK:
+    case INV_QUIVER:
+        obj->marked |= OM_DELAYED_MSG;
+        p_ptr->notice |= PN_CARRY;
+        break;
+    case INV_FLOOR:
+        msg_format("On the ground: %s.", name);
+        break;
+    }
+    autopick_alter_obj(obj, destroy_identify && !old_known);
+    obj_release(obj, OBJ_RELEASE_ID | OBJ_RELEASE_QUIET);
+    if (_use_charges) device_used_charges++;
 }
 
-static void _do_identify_aux(int item)
+void mass_identify(bool use_charges) /* shared with Sorcery spell */
 {
-    object_type    *o_ptr;
-    char            o_name[MAX_NLEN];
-    bool            old_known;
+    inv_ptr floor = inv_filter_floor(point(px, py), obj_exists);
 
-    if (item >= 0)
-        o_ptr = &inventory[item];
-    else
-        o_ptr = &o_list[-item];
+    _use_charges = use_charges;
+    pack_for_each_that(_do_identify_aux, obj_is_unknown);
+    equip_for_each_that(_do_identify_aux, obj_is_unknown);
+    quiver_for_each_that(_do_identify_aux, obj_is_unknown);
+    inv_for_each_that(floor, _do_identify_aux, obj_is_unknown);
 
-    old_known = identify_item(o_ptr);
-    object_desc(o_name, o_ptr, OD_COLOR_CODED);
+    inv_free(floor);
+}
 
-    if (equip_is_valid_slot(item))
-        msg_format("%^s: %s (%c).", equip_describe_slot(item), o_name, index_to_label(item));
-    else if (item >= 0)
-        msg_format("In your pack: %s (%c).", o_name, index_to_label(item));
-    else
-        msg_format("On the ground: %s.", o_name);
-
-    autopick_alter_item(item, (bool)(destroy_identify && !old_known));
+static int _cmd_handler(obj_prompt_context_ptr context, int cmd)
+{
+    if (cmd == '*')
+        return OP_CMD_DISMISS;
+    return OP_CMD_SKIPPED;
 }
 
 static bool _do_identify(void)
 {
-    int             item;
-    cptr            q, s;
-    int             options = USE_EQUIP | USE_INVEN | USE_FLOOR;
+    obj_prompt_t prompt = {0};
 
     assert(device_used_charges == 0);
-    if (device_available_charges > 1)
-        options |=  OPTION_ALL;
 
-    item_tester_no_ryoute = TRUE;
-    item_tester_hook = _do_identify_hook;
+    prompt.prompt = "Identify which item <color:w>(<color:keypress>*</color> for all)</color>?";
+    prompt.error = "All items are identified.";
+    prompt.filter = obj_is_unknown;
+    prompt.where[0] = INV_PACK;
+    prompt.where[1] = INV_EQUIP;
+    prompt.where[2] = INV_QUIVER;
+    prompt.where[3] = INV_FLOOR;
+    prompt.cmd_handler = _cmd_handler;
 
-    if (can_get_item())
-        q = "Identify which item? ";
-    else
-        q = "All items are identified. ";
-
-    s = "You have nothing to identify.";
-    if (!get_item(&item, q, s, options))
-        return FALSE;
-
-    if (item == INVEN_ALL)
+    switch (obj_prompt(&prompt))
     {
-        int i;
-        int this_o_idx, next_o_idx;
-
-        /* Equipment and Pack */
-        for (i = 0; i < INVEN_TOTAL && device_used_charges < device_available_charges; i++)
-        {
-            if (!inventory[i].k_idx) continue;
-            if (object_is_known(&inventory[i])) continue;
-            _do_identify_aux(i);
-            device_used_charges++;
-        }
-
-        /* Floor */
-        for (this_o_idx = cave[py][px].o_idx;
-                this_o_idx && device_used_charges < device_available_charges;
-                this_o_idx = next_o_idx)
-        {
-            object_type *o_ptr = &o_list[this_o_idx];
-
-            next_o_idx = o_ptr->next_o_idx;
-            if (object_is_known(o_ptr)) continue;
-            _do_identify_aux(-this_o_idx);
-            device_used_charges++;
-        }
+    case OP_CUSTOM:
+        mass_identify(TRUE);
+        return TRUE;
+    case OP_SUCCESS:
+        _use_charges = TRUE;
+        _do_identify_aux(prompt.obj);
+        return TRUE;
     }
-    else
-    {
-        _do_identify_aux(item);
-        device_used_charges++;
-    }
-
-    return TRUE;
+    return FALSE;
 }
 
 /* Using Devices
@@ -626,12 +647,13 @@ static cptr _do_potion(int sval, int mode)
             if (set_stun(0, TRUE)) device_noticed = TRUE;
         }
         break;
-    case SV_POTION_HEALING:
+    case SV_POTION_HEALING: {
+        int amt = quickband ? 500 : 300;
         if (desc) return "It heals you and cures blindness, confusion, poison, stunned, cuts and berserk when you quaff it.";
-        if (info) return info_heal(0, 0, _potion_power(300));
+        if (info) return info_heal(0, 0, _potion_power(amt));
         if (cast)
         {
-            if (hp_player(_potion_power(300))) device_noticed = TRUE;
+            if (hp_player(_potion_power(amt))) device_noticed = TRUE;
             if (set_blind(0, TRUE)) device_noticed = TRUE;
             if (set_confused(0, TRUE)) device_noticed = TRUE;
             if (set_poisoned(0, TRUE)) device_noticed = TRUE;
@@ -639,7 +661,7 @@ static cptr _do_potion(int sval, int mode)
             if (set_cut(0, TRUE)) device_noticed = TRUE;
             if (set_shero(0,TRUE)) device_noticed = TRUE;
         }
-        break;
+        break; }
     case SV_POTION_STAR_HEALING:
         if (desc) return "It heals you and cures blindness, confusion, poison, stunned, cuts and berserk when you quaff it.";
         if (info) return info_heal(0, 0, _potion_power(1000));
@@ -689,9 +711,8 @@ static cptr _do_potion(int sval, int mode)
             int amt = _potion_power(damroll(5, 6) + 5);
 
             if (p_ptr->pclass == CLASS_RUNE_KNIGHT)
-                amt = (amt + 2)/3;
-
-            if (sp_player(amt))
+                msg_print("You are unaffected.");
+            else if (sp_player(amt))
             {
                 msg_print("You feel your mind clear.");
                 device_noticed = TRUE;
@@ -706,9 +727,8 @@ static cptr _do_potion(int sval, int mode)
             int amt = _potion_power(damroll(10, 10) + 15);
 
             if (p_ptr->pclass == CLASS_RUNE_KNIGHT)
-                amt = (amt + 2)/3;
-
-            if (sp_player(amt))
+                msg_print("You are unaffected.");
+            else if (sp_player(amt))
             {
                 msg_print("You feel your mind clear.");
                 device_noticed = TRUE;
@@ -905,12 +925,13 @@ static cptr _do_potion(int sval, int mode)
             device_noticed = TRUE;
         }
         break;
-    case SV_POTION_CURING:
+    case SV_POTION_CURING: {
+        int amt = quickband ? 150 : 50;
         if (desc) return "It heals you a bit and cures blindness, poison, confusion, stunning, cuts and hallucination when you quaff it.";
-        if (info) return info_heal(0, 0, _potion_power(50));
+        if (info) return info_heal(0, 0, _potion_power(amt));
         if (cast)
         {
-            if (hp_player(_potion_power(50))) device_noticed = TRUE;
+            if (hp_player(_potion_power(amt))) device_noticed = TRUE;
             if (set_blind(0, TRUE)) device_noticed = TRUE;
             if (set_poisoned(0, TRUE)) device_noticed = TRUE;
             if (set_confused(0, TRUE)) device_noticed = TRUE;
@@ -919,7 +940,7 @@ static cptr _do_potion(int sval, int mode)
             if (set_image(0, TRUE)) device_noticed = TRUE;
             if (set_shero(0,TRUE)) device_noticed = TRUE;
         }
-        break;
+        break; }
     case SV_POTION_INVULNERABILITY:
         if (desc) return "You become invulnerable temporarily when you quaff it.";
         if (info) return format("Dur d%d + %d", _potion_power(4), _potion_power(4));
@@ -941,8 +962,15 @@ static cptr _do_potion(int sval, int mode)
             device_noticed = TRUE;
             if (p_ptr->pclass == CLASS_WILD_TALENT)
                 wild_talent_new_life();
+            /* XXX Originally, this was here as an act of mercy for players new to this class.
+             * However, it is hugely scummable since you can pick the powers useful in early play
+             * and then new life to switch over to those useful in late game. Several psion powers
+             * are huge in the early game, but not so much later on. Players will abuse this. Also,
+             * the Skillmaster has exactly the same permanent-irreversible-don't-screw-up-your-choices
+             * game mechanic and receive no such love. Keeping things for the Wild Talent makes
+             * sense though, since they are random (and don't get a say in the matter anyway).
             if (p_ptr->pclass == CLASS_PSION && get_check("Relearn Powers? "))
-                psion_relearn_powers();
+                psion_relearn_powers();*/
         }
         break;
     case SV_POTION_NEO_TSUYOSHI:
@@ -1400,32 +1428,33 @@ static cptr _do_scroll(int sval, int mode)
         if (desc) return "It increases the number you can study spells when you read. If you are the class can't study or don't need to study, it has no effect.";
         if (cast)
         {
-            if ((p_ptr->pclass == CLASS_WARRIOR) ||
-                (p_ptr->pclass == CLASS_IMITATOR) ||
-                (p_ptr->pclass == CLASS_MINDCRAFTER) ||
-                (p_ptr->pclass == CLASS_PSION) ||
-                (p_ptr->pclass == CLASS_SORCERER) ||
-                (p_ptr->pclass == CLASS_ARCHER) ||
-                (p_ptr->pclass == CLASS_MAGIC_EATER) ||
+            if (p_ptr->pclass == CLASS_WARRIOR ||
+                p_ptr->pclass == CLASS_IMITATOR ||
+                p_ptr->pclass == CLASS_MINDCRAFTER ||
+                p_ptr->pclass == CLASS_PSION ||
+                p_ptr->pclass == CLASS_SORCERER ||
+                p_ptr->pclass == CLASS_ARCHER ||
+                p_ptr->pclass == CLASS_MAGIC_EATER ||
                 p_ptr->pclass == CLASS_DEVICEMASTER ||
-                (p_ptr->pclass == CLASS_RED_MAGE) ||
-                (p_ptr->pclass == CLASS_SAMURAI) ||
-                (p_ptr->pclass == CLASS_BLUE_MAGE) ||
-                (p_ptr->pclass == CLASS_CAVALRY) ||
-                (p_ptr->pclass == CLASS_BERSERKER) ||
-                (p_ptr->pclass == CLASS_WEAPONSMITH) ||
-                (p_ptr->pclass == CLASS_MIRROR_MASTER) ||
-                (p_ptr->pclass == CLASS_TIME_LORD) ||
-                (p_ptr->pclass == CLASS_BLOOD_KNIGHT) ||
-                (p_ptr->pclass == CLASS_WARLOCK) ||
-                (p_ptr->pclass == CLASS_ARCHAEOLOGIST) ||
-                (p_ptr->pclass == CLASS_DUELIST) ||
-                (p_ptr->pclass == CLASS_RUNE_KNIGHT) ||
-                (p_ptr->pclass == CLASS_WILD_TALENT) ||
-                (p_ptr->pclass == CLASS_NINJA) ||
+                p_ptr->pclass == CLASS_RED_MAGE ||
+                p_ptr->pclass == CLASS_SAMURAI ||
+                p_ptr->pclass == CLASS_BLUE_MAGE ||
+                p_ptr->pclass == CLASS_CAVALRY ||
+                p_ptr->pclass == CLASS_BERSERKER ||
+                p_ptr->pclass == CLASS_WEAPONSMITH ||
+                p_ptr->pclass == CLASS_MIRROR_MASTER ||
+                p_ptr->pclass == CLASS_TIME_LORD ||
+                p_ptr->pclass == CLASS_BLOOD_KNIGHT ||
+                p_ptr->pclass == CLASS_WARLOCK ||
+                p_ptr->pclass == CLASS_ARCHAEOLOGIST ||
+                p_ptr->pclass == CLASS_DUELIST ||
+                p_ptr->pclass == CLASS_RUNE_KNIGHT ||
+                p_ptr->pclass == CLASS_WILD_TALENT ||
+                p_ptr->pclass == CLASS_NINJA ||
                 p_ptr->pclass == CLASS_SCOUT ||
                 p_ptr->pclass == CLASS_MYSTIC ||
-                p_ptr->pclass == CLASS_MAULER)
+                p_ptr->pclass == CLASS_MAULER ||
+                p_ptr->pclass == CLASS_SKILLMASTER )
             {
                 msg_print("There is no effect.");
             }
@@ -1540,66 +1569,52 @@ static cptr _do_scroll(int sval, int mode)
         if (desc) return "It seems to be the hurried scribblings of a mad wizard on the verge of some great arcane discovery. You can't make heads or tails of it. Do you read it to see what happens?";
         if (cast)
         {
-            int item;
-            object_type *o_ptr;
             int n = randint0(_scroll_power(100));
-
-            item_tester_hook = item_tester_hook_nameless_weapon_armour;
-            if (!get_item(&item, "Use which item? ", "You have nothing to use.", (USE_EQUIP | USE_INVEN | USE_FLOOR))) return NULL;
-
-            if (item >= 0)
-                o_ptr = &inventory[item];
-            else
-                o_ptr = &o_list[0 - item];
-
-            if (o_ptr->number > 1)
-            {
-                msg_print("Don't be greedy. Just try it out on a single object at a time.");
-                return NULL;
-            }
-
             device_noticed = TRUE;
-
-            /* TODO: Add more goodies ... */
-            if (n < 10)
+            if (n < 2)
             {
-                msg_print("Ooops!  That didn't work at all!");
+                int curses = 1 + randint1(3);
+                bool stop_ty = FALSE;
+                int count = 0;
+
+                cmsg_print(TERM_VIOLET, "The scroll has an ancient, foul curse!");
+                curse_equipment(100, 50);
+                do
+                {
+                    stop_ty = activate_ty_curse(stop_ty, &count);
+                }
+                while (--curses);
+            }
+            else if (n < 12)
+            {
+                msg_print("Ooops! That didn't work at all!");
                 destroy_area(py, px, 13 + randint0(5), 300);
             }
-            else if (n < 15)
+            else if (n < 17)
             {
                 msg_print("You faintly hear crazy laughter for a moment.");
                 summon_cyber(-1, py, px);
             }
-            else if (n < 25)
+            else if (n < 27)
             {
                 msg_print("The scroll explodes violently!");
-                call_chaos(100);
+                project(0, 10, py, px, 300, GF_MANA, PROJECT_KILL | PROJECT_ITEM, -1);
             }
-            else if (n < 65)
+            else if (n < 50)
             {
-                curse_weapon(FALSE, item);    /* This curses armor too ... */
+                _do_scroll(SV_SCROLL_CURSE_ARMOR, mode);
             }
-            else if (n < 90)
+            else if (n < 75)
             {
-                if (object_is_melee_weapon(o_ptr))
-                {
-                    if (!brand_weapon_aux(item)) return "";
-                }
-                else
-                    msg_print("Funny, nothing happened.");
+                _do_scroll(SV_SCROLL_CURSE_WEAPON, mode);
+            }
+            else if (n < 95)
+            {
+                _do_scroll(SV_SCROLL_CRAFTING, mode);
             }
             else
             {
-                if (no_artifacts)
-                {
-                    if (object_is_melee_weapon(o_ptr))
-                    {
-                        if (!brand_weapon_aux(item)) return "";
-                    }
-                }
-                else
-                    create_artifact(o_ptr, CREATE_ART_SCROLL | CREATE_ART_GOOD);
+                _do_scroll(SV_SCROLL_ARTIFACT, mode);
             }
         }
         break;
@@ -1893,7 +1908,6 @@ static _effect_info_t _effect_info[] =
     {"SPEED",           EFFECT_SPEED,               25, 150,  4, BIAS_ROGUE | BIAS_MAGE | BIAS_ARCHER},
     {"SPEED_HERO",      EFFECT_SPEED_HERO,          35, 200,  6, BIAS_WARRIOR},
     {"SPEED_HERO_BLESS",EFFECT_SPEED_HERO_BLESS,    40, 250,  8, 0},
-    {"SPEED_ESSENTIA",  EFFECT_SPEED_ESSENTIA,      90, 999,  0, 0},
     {"LIGHT_SPEED",     EFFECT_LIGHT_SPEED,         99, 999, 99, 0},
     {"ENLARGE_WEAPON",  EFFECT_ENLARGE_WEAPON,      80, 900,  0, 0},
     {"TELEPATHY",       EFFECT_TELEPATHY,           30, 150,  8, BIAS_MAGE | BIAS_ARCHER},
@@ -1938,8 +1952,8 @@ static _effect_info_t _effect_info[] =
     {"CURE_FEAR_POIS",  EFFECT_CURE_FEAR_POIS,      30, 100,  1, BIAS_PRIESTLY},
     {"REMOVE_CURSE",    EFFECT_REMOVE_CURSE,        30, 200,  1, BIAS_PRIESTLY},
     {"REMOVE_ALL_CURSE",EFFECT_REMOVE_ALL_CURSE,    70, 500,  4, BIAS_PRIESTLY},
-    {"CLARITY",         EFFECT_CLARITY,             20, 100, 12, BIAS_PRIESTLY | BIAS_MAGE},
-    {"GREAT_CLARITY",   EFFECT_GREAT_CLARITY,       80, 500, 64, BIAS_PRIESTLY | BIAS_MAGE},
+    {"CLARITY",         EFFECT_CLARITY,             20,  15, 12, BIAS_PRIESTLY | BIAS_MAGE},
+    {"GREAT_CLARITY",   EFFECT_GREAT_CLARITY,       80,  75, 64, BIAS_PRIESTLY | BIAS_MAGE},
 
     /* Offense: Bolts                               Lv    T   R  Bias */
     {"BOLT_MISSILE",    EFFECT_BOLT_MISSILE,         1,  10,  1, BIAS_MAGE | BIAS_ARCHER},
@@ -2059,6 +2073,7 @@ static _effect_info_t _effect_info[] =
     {"POLYMORPH",       EFFECT_POLYMORPH,           15, 100,  2, BIAS_CHAOS},
     {"STARLITE",        EFFECT_STARLITE,            20, 100,  2, 0},
     {"NOTHING",         EFFECT_NOTHING,              1,   1,  0, 0},
+    {"ENDLESS_QUIVER",  EFFECT_ENDLESS_QUIVER,      50, 150,  0, BIAS_ARCHER},
 
     /* Bad Effects                                  Lv    T   R  Bias */
     {"AGGRAVATE",       EFFECT_AGGRAVATE,           10, 100,  1, BIAS_DEMON},
@@ -2117,6 +2132,18 @@ bool effect_learn(int type)
         return TRUE;
     }
     return FALSE;
+}
+
+int effect_parse_type(cptr type)
+{
+    int i;
+    for (i = 0; ; i++)
+    {
+        if (!_effect_info[i].text) break;
+        if (streq(type, _effect_info[i].text))
+            return _effect_info[i].type;
+    }
+    return EFFECT_NONE;
 }
 
 errr effect_parse(char *line, effect_t *effect) /* LITE_AREA:<Lvl>:<Timeout>:<Extra> */
@@ -2189,6 +2216,7 @@ static int _choose_random(int bias)
     for (i = 0; ; i++)
     {
         if (!_effect_info[i].type) break;
+        if (_effect_info[i].level < object_level / 3) continue;
         if (bias && !(_effect_info[i].bias & bias)) continue;
         if (!_effect_info[i].rarity) continue;
 
@@ -2201,6 +2229,7 @@ static int _choose_random(int bias)
     for (i = 0; ; i++)
     {
         if (!_effect_info[i].type) break;
+        if (_effect_info[i].level < object_level / 3) continue;
         if (bias && !(_effect_info[i].bias & bias)) continue;
         if (!_effect_info[i].rarity) continue;
 
@@ -2265,52 +2294,56 @@ bool effect_add(object_type *o_ptr, int type)
  * Redoing Devices (Wands, Staves and Rods)
  ***********************************************************************/
 
-#define _DROP_GOOD       0x00000001
-#define _DROP_GREAT      0x00000002
-#define _NO_DESTROY      0x00000004
-#define _STOCK_TOWN      0x00000008
+#define _DROP_GOOD       0x0001
+#define _DROP_GREAT      0x0002
+#define _NO_DESTROY      0x0004
+#define _STOCK_TOWN      0x0008
+#define _EASY            0x0010
+#define _HARD            0x0020
+#define _COMMON          0x0040
+#define _RARE            0x0080
 
 device_effect_info_t wand_effect_table[] =
 {
     /*                            Lvl Cost Rarity  Max  Extra  Flags */
     {EFFECT_BOLT_MISSILE,           1,   3,     1,  20,     0, _STOCK_TOWN},
-    {EFFECT_HEAL_MONSTER,           2,   3,     1,  10,     0, 0},
-    {EFFECT_BEAM_LITE_WEAK,         2,   3,     1,  15,     0, _STOCK_TOWN},
+    {EFFECT_HEAL_MONSTER,           2,   3,     1,  20,     0, 0},
+    {EFFECT_BEAM_LITE_WEAK,         2,   3,     1,  20,     0, _STOCK_TOWN},
     {EFFECT_BALL_POIS,              5,   4,     1,  20,     0, _STOCK_TOWN},
     {EFFECT_SLEEP_MONSTER,          5,   5,     1,  20,     0, _STOCK_TOWN},
     {EFFECT_SLOW_MONSTER,           5,   5,     1,  20,     0, _STOCK_TOWN},
     {EFFECT_CONFUSE_MONSTER,        5,   5,     1,  20,     0, 0},
     {EFFECT_SCARE_MONSTER,          7,   5,     1,  20,     0, 0},
-    {EFFECT_STONE_TO_MUD,          10,   5,     1,  60,     0, 0},
-    {EFFECT_POLYMORPH,             12,   6,     1,  25,     0, 0},
-    {EFFECT_BOLT_COLD,             12,   7,     1,  25,     0, 0},
-    {EFFECT_BOLT_ELEC,             15,   7,     1,  25,     0, 0},
-    {EFFECT_BOLT_ACID,             17,   8,     1,  25,     0, 0},
-    {EFFECT_BOLT_FIRE,             19,   9,     1,  25,     0, 0},
-    {EFFECT_HASTE_MONSTER,         20,   3,     1,  30,     0, 0},
-    {EFFECT_TELEPORT_AWAY,         20,  10,     1,  60,     0, 0},
-    {EFFECT_DESTROY_TRAPS,         20,  10,     1,  40,     0, 0},
-    {EFFECT_CHARM_MONSTER,         25,  11,     1,  40,     0, 0},
-    {EFFECT_BALL_COLD,             26,  12,     1,  40,     0, 0},
-    {EFFECT_BALL_ELEC,             28,  12,     1,  40,     0, 0},
-    {EFFECT_BALL_ACID,             29,  13,     1,  40,     0, 0},
-    {EFFECT_BALL_FIRE,             30,  14,     1,  40,     0, 0},
-    {EFFECT_BOLT_WATER,            30,  15,     1,  50,     0, 0},
-    {EFFECT_BOLT_ICE,              32,  16,     1,  50,     0, 0},
-    {EFFECT_BOLT_PLASMA,           35,  18,     1,  50,     0, 0},
-    {EFFECT_DRAIN_LIFE,            40,  19,     1,  60,     0, 0},
-    {EFFECT_ARROW,                 45,  20,     1,  60,     0, 0},
-    {EFFECT_BALL_NEXUS,            47,  21,     1,  60,     0, _DROP_GOOD},
-    {EFFECT_BREATHE_COLD,          50,  22,     1,  70,     0, _DROP_GOOD | _NO_DESTROY},
-    {EFFECT_BREATHE_FIRE,          50,  23,     1,  70,     0, _DROP_GOOD | _NO_DESTROY},
-    {EFFECT_BEAM_GRAVITY,          55,  25,     2,   0,     0, _DROP_GOOD | _NO_DESTROY},
-    {EFFECT_METEOR,                55,  26,     2,   0,     0, _DROP_GOOD | _NO_DESTROY},
-    {EFFECT_BREATHE_ONE_MULTIHUED, 60,  27,     2,   0,     0, _DROP_GOOD | _NO_DESTROY},
-    {EFFECT_GENOCIDE_ONE,          60,  27,     2,   0,     0, _DROP_GOOD | _NO_DESTROY},
-    {EFFECT_BALL_WATER,            65,  28,     2,   0,     0, _DROP_GOOD | _NO_DESTROY},
-    {EFFECT_BALL_DISINTEGRATE,     70,  35,     2,   0,     0, _DROP_GOOD | _DROP_GREAT | _NO_DESTROY},
-    {EFFECT_ROCKET,                85,  40,     3,   0,     0, _DROP_GOOD | _DROP_GREAT | _NO_DESTROY},
-    {EFFECT_WALL_BUILDING,        100,  50,    16,   0,     0, _DROP_GOOD | _DROP_GREAT | _NO_DESTROY},
+    {EFFECT_STONE_TO_MUD,          10,   5,     1,   0,     0, _EASY | _COMMON},
+    {EFFECT_POLYMORPH,             12,   6,     1,  30,     0, 0},
+    {EFFECT_BOLT_COLD,             12,   7,     1,  30,     0, 0},
+    {EFFECT_BOLT_ELEC,             15,   7,     1,  30,     0, 0},
+    {EFFECT_BOLT_ACID,             17,   8,     1,  35,     0, 0},
+    {EFFECT_BOLT_FIRE,             19,   9,     1,  35,     0, 0},
+    {EFFECT_HASTE_MONSTER,         20,   3,     1,  40,     0, 0},
+    {EFFECT_TELEPORT_AWAY,         20,  10,     1,   0,     0, _EASY | _COMMON},
+    {EFFECT_DESTROY_TRAPS,         20,  10,     1,   0,     0, _EASY},
+    {EFFECT_CHARM_MONSTER,         25,  11,     1,  50,     0, 0},
+    {EFFECT_BALL_COLD,             26,  12,     1,   0,     0, 0},
+    {EFFECT_BALL_ELEC,             28,  12,     1,   0,     0, 0},
+    {EFFECT_BALL_ACID,             29,  13,     1,   0,     0, 0},
+    {EFFECT_BALL_FIRE,             30,  14,     1,   0,     0, 0},
+    {EFFECT_BOLT_WATER,            30,  15,     1,   0,     0, 0},
+    {EFFECT_BOLT_ICE,              32,  16,     1,   0,     0, 0},
+    {EFFECT_BOLT_PLASMA,           35,  18,     1,   0,     0, 0},
+    {EFFECT_DRAIN_LIFE,            40,  19,     1,   0,     0, 0},
+    {EFFECT_ARROW,                 45,  20,     1,   0,     0, _EASY},
+    {EFFECT_BALL_NEXUS,            47,  21,     1,   0,     0, _DROP_GOOD},
+    {EFFECT_BREATHE_COLD,          50,  22,     1,   0,     0, _DROP_GOOD | _NO_DESTROY | _HARD},
+    {EFFECT_BREATHE_FIRE,          50,  23,     1,   0,     0, _DROP_GOOD | _NO_DESTROY | _HARD},
+    {EFFECT_BEAM_GRAVITY,          55,  25,     2,   0,     0, _DROP_GOOD | _NO_DESTROY | _EASY},
+    {EFFECT_METEOR,                55,  26,     2,   0,     0, _DROP_GOOD | _NO_DESTROY | _HARD},
+    {EFFECT_BREATHE_ONE_MULTIHUED, 60,  27,     2,   0,     0, _DROP_GOOD | _NO_DESTROY | _HARD},
+    {EFFECT_GENOCIDE_ONE,          65,  27,     2,   0,     0, _DROP_GOOD | _NO_DESTROY | _HARD},
+    {EFFECT_BALL_WATER,            70,  28,     2,   0,     0, _DROP_GOOD | _NO_DESTROY | _HARD},
+    {EFFECT_BALL_DISINTEGRATE,     75,  35,     2,   0,     0, _DROP_GOOD | _DROP_GREAT | _NO_DESTROY | _HARD},
+    {EFFECT_ROCKET,                85,  45,     3,   0,     0, _DROP_GOOD | _DROP_GREAT | _NO_DESTROY | _RARE | _HARD},
+    {EFFECT_WALL_BUILDING,        100,  50,    16,   0,     0, _DROP_GOOD | _DROP_GREAT | _NO_DESTROY | _HARD},
     {0}
 };
 
@@ -2318,41 +2351,41 @@ device_effect_info_t rod_effect_table[] =
 {
     /*                            Lvl Cost Rarity  Max  Extra  Flags */
     {EFFECT_PESTICIDE,              1,   3,     1,  20,     0, 0},
-    {EFFECT_DETECT_TRAPS,           5,   4,     1,  25,     0, 0},
-    {EFFECT_LITE_AREA,             10,   5,     1,  25,     0, 0},
-    {EFFECT_DETECT_DOOR_STAIRS,    12,   6,     1,  25,     0, 0},
-    {EFFECT_DETECT_MONSTERS,       15,   6,     1,  30,     0, 0},
-    {EFFECT_BEAM_ELEC,             17,   8,     1,  30,     0, 0},
-    {EFFECT_BEAM_COLD,             19,   9,     1,  30,     0, 0},
-    {EFFECT_BEAM_FIRE,             21,  10,     1,  35,     0, 0},
-    {EFFECT_BEAM_ACID,             23,  12,     1,  35,     0, 0},
-    {EFFECT_BEAM_LITE,             25,  15,     1,  60,     0, 0},
-    {EFFECT_RECALL,                27,  15,     1,  60,     0, 0},
-    {EFFECT_DETECT_ALL,            30,  17,     2,  60,     0, 0},
-    {EFFECT_ESCAPE,                30,  20,     1,  60,     0, 0},
-    {EFFECT_BEAM_CHAOS,            32,  21,     1,  50,     0, 0},
-    {EFFECT_BEAM_SOUND,            32,  22,     1,  50,     0, 0},
-    {EFFECT_CLARITY,               35,  15,     3,  50,     0, _DROP_GOOD},
-    {EFFECT_TELEKINESIS,           40,  25,     1,  50,     0, 0},
-    {EFFECT_BALL_ELEC,             40,  25,     1,  55,     0, 0},
-    {EFFECT_BALL_COLD,             40,  25,     1,  55,     0, 0},
-    {EFFECT_BALL_FIRE,             42,  27,     1,  55,     0, 0},
-    {EFFECT_BALL_ACID,             44,  29,     1,  55,     0, 0},
-    {EFFECT_BOLT_MANA,             45,  30,     3,  60,     0, _DROP_GOOD},
-    {EFFECT_BALL_NETHER,           45,  31,     1,  60,     0, 0},
-    {EFFECT_BALL_DISEN,            47,  32,     1,  60,     0, _DROP_GOOD},
-    {EFFECT_ENLIGHTENMENT,         50,  33,     2,  70,     0, 0},
-    {EFFECT_BALL_SOUND,            52,  35,     2,  80,     0, _DROP_GOOD},
-    {EFFECT_BEAM_DISINTEGRATE,     60,  37,     2,   0,     0, _DROP_GOOD},
-    {EFFECT_SPEED_HERO,            70,  40,     2,   0,     0, _DROP_GOOD | _DROP_GREAT},
-    {EFFECT_GREAT_CLARITY,         80,  60,     4,   0,     0, _DROP_GOOD | _DROP_GREAT},
-    {EFFECT_HEAL_CURING_HERO,      80,  60,     3,   0,     0, _DROP_GOOD | _DROP_GREAT},
-    {EFFECT_RESTORING,             80,  60,     3,   0,     0, _DROP_GOOD | _DROP_GREAT},
-    {EFFECT_BALL_MANA,             80,  45,     2,   0,     0, _DROP_GOOD | _DROP_GREAT},
-    {EFFECT_BALL_SHARDS,           80,  45,     2,   0,     0, _DROP_GOOD | _DROP_GREAT},
-    {EFFECT_BALL_CHAOS,            85,  45,     3,   0,     0, _DROP_GOOD | _DROP_GREAT},
-    {EFFECT_CLAIRVOYANCE,          90, 100,     3,   0,     0, _DROP_GOOD | _DROP_GREAT},
-    {EFFECT_BALL_LITE,             95,  50,     3,   0,     0, _DROP_GOOD | _DROP_GREAT},
+    {EFFECT_DETECT_TRAPS,           5,   4,     1,  30,     0, 0},
+    {EFFECT_LITE_AREA,             10,   5,     1,  40,     0, 0},
+    {EFFECT_DETECT_DOOR_STAIRS,    12,   6,     1,  40,     0, 0},
+    {EFFECT_DETECT_MONSTERS,       15,   6,     1,  40,     0, 0},
+    {EFFECT_BEAM_ELEC,             17,   8,     1,  50,     0, 0},
+    {EFFECT_BEAM_COLD,             19,   9,     1,  50,     0, 0},
+    {EFFECT_BEAM_FIRE,             21,  10,     1,  60,     0, 0},
+    {EFFECT_BEAM_ACID,             23,  12,     1,  60,     0, 0},
+    {EFFECT_BEAM_LITE,             25,  15,     1,   0,     0, 0},
+    {EFFECT_RECALL,                27,  15,     1,   0,     0, _EASY | _COMMON},
+    {EFFECT_DETECT_ALL,            30,  17,     2,   0,     0, _EASY | _COMMON},
+    {EFFECT_ESCAPE,                30,  20,     1,   0,     0, _EASY},
+    {EFFECT_BEAM_CHAOS,            32,  21,     2,  60,     0, 0},
+    {EFFECT_BEAM_SOUND,            32,  22,     2,  70,     0, 0},
+    {EFFECT_CLARITY,               35,  15,     3,  80,     0, _DROP_GOOD},
+    {EFFECT_TELEKINESIS,           40,  25,     3,   0,     0, 0},
+    {EFFECT_BALL_ELEC,             40,  25,     1,   0,     0, 0},
+    {EFFECT_BALL_COLD,             40,  25,     1,   0,     0, 0},
+    {EFFECT_BALL_FIRE,             42,  27,     1,   0,     0, 0},
+    {EFFECT_BALL_ACID,             44,  29,     1,   0,     0, 0},
+    {EFFECT_BOLT_MANA,             45,  30,     2,   0,     0, _DROP_GOOD | _HARD},
+    {EFFECT_BALL_NETHER,           45,  31,     1,   0,     0, 0},
+    {EFFECT_BALL_DISEN,            47,  32,     2,   0,     0, _DROP_GOOD},
+    {EFFECT_ENLIGHTENMENT,         50,  33,     2,   0,     0, _EASY | _COMMON},
+    {EFFECT_BALL_SOUND,            52,  35,     2,   0,     0, _DROP_GOOD | _HARD},
+    {EFFECT_BEAM_DISINTEGRATE,     60,  37,     2,   0,     0, _DROP_GOOD | _EASY},
+    {EFFECT_SPEED_HERO,            70,  40,     2,   0,     0, _DROP_GOOD | _DROP_GREAT | _EASY},
+    {EFFECT_GREAT_CLARITY,         75,  60,     4,   0,     0, _DROP_GOOD | _DROP_GREAT},
+    {EFFECT_HEAL_CURING_HERO,      80,  60,     3,   0,     0, _DROP_GOOD | _DROP_GREAT | _HARD},
+    {EFFECT_RESTORING,             80,  60,     3,   0,     0, _DROP_GOOD | _DROP_GREAT | _EASY},
+    {EFFECT_BALL_MANA,             80,  45,     2,   0,     0, _DROP_GOOD | _DROP_GREAT | _RARE | _HARD},
+    {EFFECT_BALL_SHARDS,           80,  45,     2,   0,     0, _DROP_GOOD | _DROP_GREAT | _RARE | _HARD},
+    {EFFECT_BALL_CHAOS,            85,  45,     3,   0,     0, _DROP_GOOD | _DROP_GREAT | _RARE | _HARD},
+    {EFFECT_CLAIRVOYANCE,          90, 100,     3,   0,     0, _DROP_GOOD | _DROP_GREAT | _EASY},
+    {EFFECT_BALL_LITE,             95,  50,     3,   0,     0, _DROP_GOOD | _DROP_GREAT | _RARE | _HARD},
     {0}
 };
 
@@ -2361,52 +2394,52 @@ device_effect_info_t staff_effect_table[] =
     /*                            Lvl Cost Rarity  Max  Extra */
     {EFFECT_NOTHING,                1,   1,     0,   0,     0, 0},
     {EFFECT_DARKNESS,               1,   3,     1,  15,     0, 0},
-    {EFFECT_LITE_AREA,              1,   3,     1,  20,     0, _STOCK_TOWN},
-    {EFFECT_DETECT_GOLD,            5,   4,     1,  20,     0, _STOCK_TOWN},
+    {EFFECT_LITE_AREA,              1,   3,     1,  30,     0, _STOCK_TOWN},
+    {EFFECT_DETECT_GOLD,            5,   4,     1,  30,     0, _STOCK_TOWN},
     {EFFECT_DETECT_OBJECTS,         5,   4,     1,  30,     0, _STOCK_TOWN},
-    {EFFECT_DETECT_INVISIBLE,       5,   4,     1,  20,     0, 0},
+    {EFFECT_DETECT_INVISIBLE,       5,   4,     1,  30,     0, 0},
     {EFFECT_DETECT_TRAPS,           5,   5,     1,  30,     0, _STOCK_TOWN},
-    {EFFECT_DETECT_DOOR_STAIRS,     5,   5,     1,  20,     0, _STOCK_TOWN},
+    {EFFECT_DETECT_DOOR_STAIRS,     5,   5,     1,  30,     0, _STOCK_TOWN},
     {EFFECT_DETECT_EVIL,            7,   5,     1,  30,     0, 0},
-    {EFFECT_HASTE_MONSTERS,        10,   5,     1,  20,     0, 0},
-    {EFFECT_SUMMON_ANGRY_MONSTERS, 10,   5,     1,  20,     0, 0},
-    {EFFECT_IDENTIFY,              10,   4,     1,  70,     0, _STOCK_TOWN},
-    {EFFECT_SLEEP_MONSTERS,        10,   6,     1,  25,     0, 0},
-    {EFFECT_SLOW_MONSTERS,         10,   6,     1,  25,     0, 0},
-    {EFFECT_CONFUSE_MONSTERS,      15,   8,     1,  25,     0, 0},
-    {EFFECT_TELEPORT,              20,  10,     1,  50,     0, 0},
-    {EFFECT_ENLIGHTENMENT,         20,  10,     1,  50,     0, _STOCK_TOWN},
-    {EFFECT_STARLITE,              20,  10,     1,  40,     0, 0},
-    {EFFECT_EARTHQUAKE,            20,  10,     1,  40,     0, 0},
-    {EFFECT_HEAL,                  20,  10,     2,  60,    50, 0}, /* Cure Wounds for 50hp */
-    {EFFECT_CURING,                25,  12,     1,  50,     0, 0}, /* Curing no longer heals */
-    {EFFECT_SUMMON_HOUNDS,         27,  25,     2,  40,     0, 0},
-    {EFFECT_SUMMON_HYDRAS,         27,  25,     3,  40,     0, 0},
-    {EFFECT_SUMMON_ANTS,           27,  20,     1,  40,     0, 0},
-    {EFFECT_PROBING,               30,  15,     1,  40,     0, 0},
-    {EFFECT_TELEPATHY,             30,  16,     2,  60,     0, 0},
-    {EFFECT_SUMMON_MONSTERS,       32,  30,     1,  50,     0, 0},
-    {EFFECT_ANIMATE_DEAD,          35,  17,     1,  50,     0, 0},
-    {EFFECT_SLOWNESS,              40,  19,     1,  50,     0, 0},
-    {EFFECT_SPEED,                 40,  19,     1,  60,     0, 0},
-    {EFFECT_IDENTIFY_FULL,         40,  20,     2,  70,     0, 0},
-    {EFFECT_REMOVE_CURSE,          40,  20,     2,  50,     0, 0},
-    {EFFECT_DISPEL_DEMON,          50,  21,     2,  70,     0, 0},
-    {EFFECT_DISPEL_UNDEAD,         50,  21,     2,  70,     0, 0},
-    {EFFECT_DISPEL_LIFE,           50,  22,     2,  70,     0, 0},
-    {EFFECT_DISPEL_EVIL,           50,  23,     2,  80,     0, 0},
-    {EFFECT_DISPEL_MONSTERS,       50,  24,     2,  80,     0, 0},
-    {EFFECT_HOLINESS,              50,  25,     2,  80,     0, _DROP_GOOD},
-    {EFFECT_DESTRUCTION,           50,  25,     2,   0,     0, _DROP_GOOD},
-    {EFFECT_CONFUSING_LITE,        55,  26,     2,   0,     0, _DROP_GOOD},
-    {EFFECT_HEAL_CURING,           60,  30,     3,   0,     0, _DROP_GOOD | _DROP_GREAT},
-    {EFFECT_BANISH_EVIL,           65,  31,     2,  80,     0, _DROP_GOOD},
-    {EFFECT_BANISH_ALL,            65,  32,     3,   0,     0, _DROP_GOOD},
-    {EFFECT_GENOCIDE,              75,  35,     5,   0,     0, _DROP_GOOD | _DROP_GREAT},
-    {EFFECT_MANA_STORM,            85,  40,     3,   0,     0, _DROP_GOOD | _DROP_GREAT | _NO_DESTROY},
-    {EFFECT_STARBURST,             85,  41,     3,   0,     0, _DROP_GOOD | _DROP_GREAT | _NO_DESTROY},
-    {EFFECT_DARKNESS_STORM,        85,  42,     3,   0,     0, _DROP_GOOD | _DROP_GREAT | _NO_DESTROY},
-    {EFFECT_RESTORE_MANA,         100, 100,    16,   0,     0, _DROP_GOOD | _DROP_GREAT | _NO_DESTROY},
+    {EFFECT_HASTE_MONSTERS,        10,   5,     1,  30,     0, 0},
+    {EFFECT_SUMMON_ANGRY_MONSTERS, 10,   5,     1,  30,     0, 0},
+    {EFFECT_IDENTIFY,              10,   4,     1,   0,     0, _STOCK_TOWN | _EASY | _COMMON},
+    {EFFECT_SLEEP_MONSTERS,        10,   6,     1,  40,     0, 0},
+    {EFFECT_SLOW_MONSTERS,         10,   6,     1,  40,     0, 0},
+    {EFFECT_CONFUSE_MONSTERS,      15,   8,     1,  40,     0, 0},
+    {EFFECT_TELEPORT,              20,  10,     1,   0,     0, _EASY},
+    {EFFECT_ENLIGHTENMENT,         20,  10,     1,  70,     0, _STOCK_TOWN | _EASY},
+    {EFFECT_STARLITE,              20,  10,     1,  50,     0, _EASY},
+    {EFFECT_EARTHQUAKE,            20,  10,     1,   0,     0, _EASY},
+    {EFFECT_HEAL,                  20,  10,     2,  70,     0, _EASY | _COMMON}, /* Cure Wounds for ~50hp */
+    {EFFECT_CURING,                25,  12,     1,  70,     0, _EASY}, /* Curing no longer heals */
+    {EFFECT_SUMMON_HOUNDS,         27,  25,     2,   0,     0, _EASY},
+    {EFFECT_SUMMON_HYDRAS,         27,  25,     3,   0,     0, _EASY},
+    {EFFECT_SUMMON_ANTS,           27,  20,     2,   0,     0, _EASY},
+    {EFFECT_PROBING,               30,  15,     1,  70,     0, _EASY},
+    {EFFECT_TELEPATHY,             30,  16,     2,   0,     0, _EASY},
+    {EFFECT_SUMMON_MONSTERS,       32,  30,     2,   0,     0, 0},
+    {EFFECT_ANIMATE_DEAD,          35,  17,     1,  70,     0, _EASY},
+    {EFFECT_SLOWNESS,              40,  19,     3,  70,     0, 0},
+    {EFFECT_SPEED,                 40,  19,     1,   0,     0, _EASY | _COMMON},
+    {EFFECT_IDENTIFY_FULL,         40,  20,     2,   0,     0, _EASY | _COMMON},
+    {EFFECT_REMOVE_CURSE,          40,  20,     2,   0,     0, _EASY},
+    {EFFECT_DISPEL_DEMON,          45,  21,     2,   0,     0, _EASY},
+    {EFFECT_DISPEL_UNDEAD,         45,  21,     2,   0,     0, _EASY},
+    {EFFECT_DISPEL_LIFE,           50,  22,     2,   0,     0, 0},
+    {EFFECT_DISPEL_EVIL,           55,  23,     2,   0,     0, 0},
+    {EFFECT_DISPEL_MONSTERS,       55,  24,     2,   0,     0, _HARD},
+    {EFFECT_HOLINESS,              45,  25,     2,   0,     0, _DROP_GOOD | _HARD},
+    {EFFECT_DESTRUCTION,           50,  25,     2,   0,     0, _DROP_GOOD | _HARD},
+    {EFFECT_CONFUSING_LITE,        55,  26,     2,   0,     0, _DROP_GOOD | _HARD},
+    {EFFECT_HEAL_CURING,           55,  30,     3,   0,     0, _DROP_GOOD | _DROP_GREAT | _HARD},
+    {EFFECT_BANISH_EVIL,           60,  31,     2,   0,     0, _DROP_GOOD | _EASY},
+    {EFFECT_BANISH_ALL,            70,  32,     3,   0,     0, _DROP_GOOD | _EASY},
+    {EFFECT_MANA_STORM,            85,  40,     3,   0,     0, _DROP_GOOD | _DROP_GREAT | _NO_DESTROY | _HARD | _RARE},
+    {EFFECT_STARBURST,             85,  41,     3,   0,     0, _DROP_GOOD | _DROP_GREAT | _NO_DESTROY | _HARD | _RARE},
+    {EFFECT_DARKNESS_STORM,        85,  42,     3,   0,     0, _DROP_GOOD | _DROP_GREAT | _NO_DESTROY | _HARD | _RARE},
+    {EFFECT_GENOCIDE,              90,  50,     8,   0,     0, _DROP_GOOD | _DROP_GREAT | _HARD | _RARE},
+    {EFFECT_RESTORE_MANA,         100, 100,    16,   0,     0, _DROP_GOOD | _DROP_GREAT | _NO_DESTROY | _HARD | _RARE},
     {0}
 };
 
@@ -2443,17 +2476,29 @@ static int _rand_normal(int mean, int pct)
     return result;
 }
 
-static bool _device_pick_effect_aux(object_type *o_ptr, device_effect_info_ptr entry, int level, int mode)
+static int _effect_rarity(device_effect_info_ptr entry, int level)
 {
-    if (!entry->rarity) return FALSE;
-    if (entry->level > device_level(o_ptr)) return FALSE;
-    if (entry->max_depth && entry->max_depth < level) return FALSE;
-    if ((mode & AM_GOOD) && !(entry->flags & _DROP_GOOD)) return FALSE;
-    if ((mode & AM_GREAT) && !(entry->flags & _DROP_GREAT)) return FALSE;
-    if ((mode & AM_STOCK_TOWN) && !(entry->flags & _STOCK_TOWN)) return FALSE;
-    if (easy_id && entry->type == EFFECT_IDENTIFY_FULL) return FALSE;
-    if (easy_lore && entry->type == EFFECT_PROBING) return FALSE;
-    return TRUE;
+    int r = entry->rarity;
+    if (!r) return 0;
+    if (entry->max_depth && entry->max_depth < level) return 0;
+    if (entry->flags & _RARE)
+    {
+        int n = entry->counts.found;
+        while (n--)
+            r *= 2;
+    }
+    if (level > entry->level)
+    {
+        int d = level - entry->level;
+        int n = (entry->flags & _COMMON) ? 25 : 10;
+        while (d >= n)
+        {
+            r *= 2;
+            d -= n;
+        }
+        r += d*r/n;
+    }
+    return r;
 }
 
 static void _device_pick_effect(object_type *o_ptr, device_effect_info_ptr table, int level, int mode)
@@ -2464,11 +2509,23 @@ static void _device_pick_effect(object_type *o_ptr, device_effect_info_ptr table
     for (i = 0; ; i++)
     {
         device_effect_info_ptr entry = &table[i];
+        int                    rarity;
 
         if (!entry->type) break;
-        if (!_device_pick_effect_aux(o_ptr, entry, level, mode)) continue;
 
-        tot += MAX(255 / entry->rarity, 1);
+        entry->prob = 0;
+        rarity = _effect_rarity(entry, level);
+
+        if (!rarity) continue;
+        if (entry->level > device_level(o_ptr)) continue;
+        if ((mode & AM_GOOD) && !(entry->flags & _DROP_GOOD)) continue;
+        if ((mode & AM_GREAT) && !(entry->flags & _DROP_GREAT)) continue;
+        if ((mode & AM_STOCK_TOWN) && !(entry->flags & _STOCK_TOWN)) continue;
+        if (easy_id && entry->type == EFFECT_IDENTIFY_FULL) continue;
+        if (easy_lore && entry->type == EFFECT_PROBING) continue;
+
+        entry->prob = 64 / rarity;
+        tot += entry->prob;
     }
 
     if (!tot) return;
@@ -2479,21 +2536,40 @@ static void _device_pick_effect(object_type *o_ptr, device_effect_info_ptr table
         device_effect_info_ptr entry = &table[i];
 
         if (!entry->type) break;
-        if (!_device_pick_effect_aux(o_ptr, entry, level, mode)) continue;
+        if (!entry->prob) continue;
 
-        n -= MAX(255 / entry->rarity, 1);
+        n -= entry->prob;
         if (n <= 0)
         {
             o_ptr->activation.type = entry->type;
 
             /* Power is the casting level of the device and determines damage or power of the effect.
                Difficulty is the level of the effect, and determines the fail rate of the effect.
-               We scale up the difficulty a bit depending on the level of the device. */
+               We scale up the difficulty a bit depending on the level of the device. However, some
+               devices (Identify) don't gain much by increasing power, so the fail rates should not
+               scale so strongly.*/
             o_ptr->activation.power = device_level(o_ptr);
-            o_ptr->activation.difficulty = _bounds_check(_rand_normal(entry->level, 10), 1, o_ptr->activation.power);
-            o_ptr->activation.difficulty += (o_ptr->activation.power - o_ptr->activation.difficulty) / 3;
+            o_ptr->activation.difficulty = _bounds_check(_rand_normal(entry->level, 5), 1, o_ptr->activation.power);
+            if (o_ptr->activation.power > o_ptr->activation.difficulty + 3)
+            {
+                int d = o_ptr->activation.power - o_ptr->activation.difficulty;
+                if (entry->flags & _EASY)
+                {
+                    o_ptr->activation.difficulty += d/3;
+                }
+                else if (entry->flags & _HARD)
+                {
+                    o_ptr->activation.difficulty += 3*d/4;
+                    o_ptr->activation.difficulty += randint0(d/4);
+                }
+                else
+                {
+                    o_ptr->activation.difficulty += d/3;
+                    o_ptr->activation.difficulty += randint0(d/3);
+                }
+            }
 
-            o_ptr->activation.cost = _bounds_check(_rand_normal(entry->cost, 10), 1, 1000);
+            o_ptr->activation.cost = _bounds_check(_rand_normal(entry->cost, 5), 1, 1000);
             o_ptr->activation.extra = entry->extra;
 
             if (entry->flags & _NO_DESTROY)
@@ -2544,21 +2620,21 @@ bool device_init(object_type *o_ptr, int level, int mode)
     switch (o_ptr->tval)
     {
     case TV_WAND:
-        _device_pick_effect(o_ptr, wand_effect_table, level, mode);
+        _device_pick_effect(o_ptr, wand_effect_table, o_ptr->xtra3, mode);
         if (!o_ptr->activation.type)
             return FALSE;
         /* device_max_sp */
         o_ptr->xtra4 = _bounds_check(_rand_normal(3*o_ptr->xtra3, 15), o_ptr->activation.cost*4, 1000);
         break;
     case TV_ROD:
-        _device_pick_effect(o_ptr, rod_effect_table, level, mode);
+        _device_pick_effect(o_ptr, rod_effect_table, o_ptr->xtra3, mode);
         if (!o_ptr->activation.type)
             return FALSE;
         /* device_max_sp: rods have fewer sp but regen more quickly. */
         o_ptr->xtra4 = _bounds_check(_rand_normal(3*o_ptr->xtra3/2, 15), o_ptr->activation.cost*2, 1000);
         break;
     case TV_STAFF:
-        _device_pick_effect(o_ptr, staff_effect_table, level, mode);
+        _device_pick_effect(o_ptr, staff_effect_table, o_ptr->xtra3, mode);
         if (!o_ptr->activation.type)
             return FALSE;
         /* device_max_sp */
@@ -2588,6 +2664,20 @@ static device_effect_info_ptr _device_find_effect(device_effect_info_ptr table, 
     }
 
     return NULL;
+}
+
+bool device_is_valid_effect(int tval, int effect)
+{
+    switch (tval)
+    {
+    case TV_WAND:
+        return _device_find_effect(wand_effect_table, effect) != NULL;
+    case TV_ROD:
+        return _device_find_effect(rod_effect_table, effect) != NULL;
+    case TV_STAFF:
+        return _device_find_effect(staff_effect_table, effect) != NULL;
+    }
+    return FALSE;
 }
 
 /* Initialize a device with a fixed effect. This is useful for birth objects, quest rewards, etc */
@@ -2647,6 +2737,7 @@ bool device_init_fixed(object_type *o_ptr, int effect)
     return TRUE;
 }
 
+/* TODO: See wiz_obj.c for reliance on xtra fields */
 int device_level(object_type *o_ptr)
 {
     if (_is_valid_device(o_ptr))
@@ -2661,13 +2752,30 @@ int device_sp(object_type *o_ptr)
     return 0;
 }
 
+int device_charges(object_type *o_ptr)
+{
+    if (_is_valid_device(o_ptr) && o_ptr->activation.cost)
+        return  device_sp(o_ptr) / o_ptr->activation.cost;
+    return 0;
+}
+
+int device_max_charges(object_type *o_ptr)
+{
+    if (_is_valid_device(o_ptr) && o_ptr->activation.cost)
+        return  device_max_sp(o_ptr) / o_ptr->activation.cost;
+    return 0;
+}
+
 void device_decrease_sp(object_type *o_ptr, int amt)
 {
     if (_is_valid_device(o_ptr))
     {
+        int charges = device_charges(o_ptr);
         o_ptr->xtra5 -= amt * 100;
         if (o_ptr->xtra5 < 0)
             o_ptr->xtra5 = 0;
+        if (device_charges(o_ptr) != charges)
+            p_ptr->window |= PW_INVEN;
     }
 }
 
@@ -2675,9 +2783,12 @@ void device_increase_sp(object_type *o_ptr, int amt)
 {
     if (_is_valid_device(o_ptr))
     {
+        int charges = device_charges(o_ptr);
         o_ptr->xtra5 += amt * 100;
         if (o_ptr->xtra5 > o_ptr->xtra4 * 100)
             o_ptr->xtra5 = o_ptr->xtra4 * 100;
+        if (device_charges(o_ptr) != charges)
+            p_ptr->window |= PW_INVEN;
     }
 }
 
@@ -2698,8 +2809,9 @@ void device_regen_sp_aux(object_type *o_ptr, int per_mill)
 {
     if (!device_is_fully_charged(o_ptr))
     {
-        int  div = 1000;
-        int  amt = o_ptr->xtra4 * 100 * per_mill;
+        int div = 1000;
+        int amt = o_ptr->xtra4 * 100 * per_mill;
+        int charges = device_charges(o_ptr);
 
         o_ptr->xtra5 += amt / div;
         if (randint0(div) < (amt % div))
@@ -2710,6 +2822,9 @@ void device_regen_sp_aux(object_type *o_ptr, int per_mill)
 
         if (device_is_fully_charged(o_ptr))
             recharged_notice(o_ptr);
+
+        if (device_charges(o_ptr) != charges)
+            p_ptr->window |= PW_INVEN;
     }
 }
 
@@ -2789,9 +2904,6 @@ int device_value(object_type *o_ptr, int options)
 
                 /* More charges than base gives more value */
                 result = result * charges / MAX(1, base_charges);
-
-                /* More difficult than base gives less value, but the effect is small */
-                result -= result * (o_ptr->activation.difficulty - base_level) * 3 / 100;
             }
         }
     }
@@ -2937,21 +3049,19 @@ void device_stats_on_save(savefile_ptr file)
 
 void device_stats_on_load(savefile_ptr file)
 {
+    int i, ct;
+
     _device_stats_load_imp(file, wand_effect_table);
     _device_stats_load_imp(file, rod_effect_table);
     _device_stats_load_imp(file, staff_effect_table);
 
-    if (!savefile_is_older_than(file, 5, 0, 0, 2))
+    ct = savefile_read_s32b(file);
+    for (i = 0; i < ct; i++)
     {
-        int i, ct;
-        ct = savefile_read_s32b(file);
-        for (i = 0; i < ct; i++)
-        {
-            int type = savefile_read_s32b(file);
-            _effect_info_ptr e = _get_effect_info(type);
-            if (e)
-                e->known = TRUE;
-        }
+        int type = savefile_read_s32b(file);
+        _effect_info_ptr e = _get_effect_info(type);
+        if (e)
+            e->known = TRUE;
     }
 }
 
@@ -3102,7 +3212,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
     case EFFECT_DETECT_MONSTERS:
         if (name) return "Detect Monsters";
         if (desc) return "It detects all visible monsters in your vicinity.";
-        if (value) return format("%d", 1000);
+        if (value) return format("%d", 500);
         if (color) return format("%d", TERM_L_BLUE);
         if (cast)
         {
@@ -3124,7 +3234,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
     case EFFECT_DETECT_ALL:
         if (name) return "Detection";
         if (desc) return "It detects all traps, doors, stairs, treasures, items and monsters in your vicinity.";
-        if (value) return format("%d", 5000);
+        if (value) return format("%d", 2000);
         if (color) return format("%d", TERM_ORANGE);
         if (cast)
         {
@@ -3213,7 +3323,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (value) return format("%d", 1500);
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             if (teleport_monster(dir)) device_noticed = TRUE;
         }
         break;
@@ -3625,7 +3735,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", TERM_L_DARK);
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball_hide(GF_GENOCIDE, dir, _BOOST(power), 0);
             device_noticed = TRUE;
         }
@@ -3834,7 +3944,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
     }
     case EFFECT_SPEED_HERO:
     {
-        int power = _extra(effect, 20);
+        int power = _extra(effect, effect->power/2);
         if (name) return "Heroic Speed";
         if (desc) return "It grants temporary speed and heroism.";
         if (info) return format("Dur d%d + %d", _BOOST(power), _BOOST(power));
@@ -3862,21 +3972,6 @@ cptr do_effect(effect_t *effect, int mode, int boost)
             if (set_fast(dur, FALSE)) device_noticed = TRUE;
             if (set_hero(dur, FALSE)) device_noticed = TRUE;
             if (set_blessed(dur, FALSE)) device_noticed = TRUE;
-        }
-        break;
-    }
-    case EFFECT_SPEED_ESSENTIA:
-    {
-        int power = _extra(effect, 5);
-        if (name) return "Speed Essentia";
-        if (desc) return "It temporarily grants you extra melee attacks.";
-        if (info) return format("Dur d%d + %d", _BOOST(power), _BOOST(power));
-        if (value) return format("%d", 5000 + 1000*power);
-        if (color) return format("%d", TERM_VIOLET);
-        if (cast)
-        {
-            if (set_tim_speed_essentia(_BOOST(5 + randint1(5)), FALSE))
-                device_noticed = TRUE;
         }
         break;
     }
@@ -4196,7 +4291,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (value) return format("%d", 10*_extra(effect, 50));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return FALSE;
+            if (!get_fire_dir(&dir)) return FALSE;
             if (charm_animal(dir, _BOOST(lvl)))
                 device_noticed = TRUE;
         }
@@ -4211,7 +4306,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (value) return format("%d", 15*_extra(effect, 50));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return FALSE;
+            if (!get_fire_dir(&dir)) return FALSE;
             if (control_one_demon(dir, _BOOST(lvl)))
                 device_noticed = TRUE;
         }
@@ -4226,7 +4321,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (value) return format("%d", 15*_extra(effect, 50));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return FALSE;
+            if (!get_fire_dir(&dir)) return FALSE;
             if (control_one_undead(dir, _BOOST(lvl)))
                 device_noticed = TRUE;
         }
@@ -4241,7 +4336,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (value) return format("%d", 15*_extra(effect, 50));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return FALSE;
+            if (!get_fire_dir(&dir)) return FALSE;
             if (charm_monster(dir, _BOOST(lvl)))
                 device_noticed = TRUE;
         }
@@ -4339,7 +4434,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         break;
     case EFFECT_HEAL:
     {
-        int amt = _extra(effect, 50);
+        int amt = _extra(effect, 25 + effect->power);
         if (name) return (amt < 100) ? "Cure Wounds" : "Healing";
         if (desc) return "It heals your hitpoints and cures cuts.";
         if (info) return info_heal(0, 0, _BOOST(amt));
@@ -4363,10 +4458,9 @@ cptr do_effect(effect_t *effect, int mode, int boost)
     }
     case EFFECT_CURING:
     {
-        int amt = _extra(effect, 50);
         if (name) return "Curing";
         if (desc) return "It cures blindness, poison, confusion, stunning, cuts and hallucination when you quaff it.";
-        if (value) return format("%d", 500 + 10*amt);
+        if (value) return format("%d", 1000);
         if (color) return format("%d", TERM_L_GREEN);
         if (cast)
         {
@@ -4382,7 +4476,8 @@ cptr do_effect(effect_t *effect, int mode, int boost)
     }
     case EFFECT_HEAL_CURING:
     {
-        int amt = _extra(effect, 50 + 7*effect->power/2);
+        int amt = _extra(effect, 30 + 4*effect->power);
+        if (quickband) amt = amt * 5 / 3;
         if (amt < 100)
         {
             if (name) return "Cure Wounds";
@@ -4419,7 +4514,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
     }
     case EFFECT_HEAL_CURING_HERO:
     {
-        int amt = _extra(effect, 6*effect->power);
+        int amt = _extra(effect, 50 + 5*effect->power);
         if (name) return "Angelic Healing";
         if (desc) return "It heals your hitpoints, cures what ails you, and makes you heroic.";
         if (info) return info_heal(0, 0, _BOOST(amt));
@@ -4527,9 +4622,8 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (cast)
         {
             if (p_ptr->pclass == CLASS_RUNE_KNIGHT)
-                amt = (amt + 2)/3;
-
-            if (sp_player(_BOOST(amt)))
+                msg_print("You are unaffected.");
+            else if (sp_player(_BOOST(amt)))
             {
                 msg_print("You feel your mind clear.");
                 device_noticed = TRUE;
@@ -4548,9 +4642,8 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (cast)
         {
             if (p_ptr->pclass == CLASS_RUNE_KNIGHT)
-                amt = (amt + 2)/3;
-
-            if (sp_player(_BOOST(amt)))
+                msg_print("You are unaffected.");
+            else if (sp_player(_BOOST(amt)))
             {
                 msg_print("You feel your mind clear.");
                 device_noticed = TRUE;
@@ -4570,7 +4663,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (value) return format("%d", 20*_avg_damroll(dd, ds));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_MISSILE, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4587,7 +4680,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_ACID));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_ACID, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4604,7 +4697,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_ELEC));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_ELEC, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4621,7 +4714,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_FIRE));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_FIRE, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4638,7 +4731,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_COLD));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_COLD, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4655,7 +4748,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_POIS));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_POIS, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4672,7 +4765,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_LITE));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_LITE, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4689,7 +4782,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_DARK));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_DARK, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4706,7 +4799,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_CONF));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_CONFUSION, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4723,7 +4816,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_NETHER));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_NETHER, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4740,7 +4833,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_NEXUS));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_NEXUS, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4757,7 +4850,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_SOUND));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_SOUND, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4774,7 +4867,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_SHARDS));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_SHARDS, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4791,7 +4884,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_CHAOS));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_CHAOS, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4808,7 +4901,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_DISEN));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_DISENCHANT, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4825,7 +4918,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_TIME));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_TIME, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4834,7 +4927,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
     case EFFECT_BOLT_WATER:
     {
         int dd = _extra(effect, 7 + effect->power/4);
-        int ds = 8;
+        int ds = 12;
         if (name) return "Water Bolt";
         if (desc) return "It fires a bolt of water.";
         if (info) return info_damage(_BOOST(dd), ds, 0);
@@ -4842,7 +4935,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", TERM_BLUE);
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_WATER, dir, _BOOST(damroll(dd, 8)));
             device_noticed = TRUE;
         }
@@ -4858,7 +4951,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", TERM_L_BLUE);
         if (cast)
         {
-            if (device_known && !get_aim_dir(&dir)) return NULL;
+            if (device_known && !get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_MANA, dir, _BOOST(dam));
             device_noticed = TRUE;
         }
@@ -4875,7 +4968,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_COLD));
         if (cast)
         {
-            if (device_known && !get_aim_dir(&dir)) return NULL;
+            if (device_known && !get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_ICE, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4892,7 +4985,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_FIRE));
         if (cast)
         {
-            if (device_known && !get_aim_dir(&dir)) return NULL;
+            if (device_known && !get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_PLASMA, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4912,7 +5005,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_LITE));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             msg_print("A line of blue shimmering light appears.");
             project_hook(GF_LITE_WEAK, dir, _BOOST(damroll(dd, ds)), PROJECT_BEAM | PROJECT_GRID | PROJECT_KILL);
             device_noticed = TRUE;
@@ -4929,7 +5022,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_LITE));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             msg_print("A line of pure white light appears.");
             fire_beam(GF_LITE, dir, _BOOST(dam));
             device_noticed = TRUE;
@@ -4947,7 +5040,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", TERM_L_UMBER);
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_beam(GF_GRAVITY, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4964,7 +5057,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", TERM_SLATE);
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir_aux(&dir, TARGET_DISI)) return NULL;
             fire_beam(GF_DISINTEGRATE, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4981,7 +5074,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_ACID));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_beam(GF_ACID, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -4998,7 +5091,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_ELEC));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_beam(GF_ELEC, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -5015,7 +5108,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_FIRE));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_beam(GF_FIRE, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -5032,7 +5125,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_COLD));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_beam(GF_COLD, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -5049,7 +5142,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_SOUND));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_beam(GF_SOUND, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -5066,7 +5159,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_CHAOS));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_beam(GF_CHAOS, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -5084,7 +5177,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_ACID));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_ACID, dir, _BOOST(dam), 2);
             device_noticed = TRUE;
         }
@@ -5100,7 +5193,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_ELEC));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_ELEC, dir, _BOOST(dam), 2);
             device_noticed = TRUE;
         }
@@ -5116,7 +5209,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_FIRE));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_FIRE, dir, _BOOST(dam), 2);
             device_noticed = TRUE;
         }
@@ -5132,7 +5225,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_COLD));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_COLD, dir, _BOOST(dam), 2);
             device_noticed = TRUE;
         }
@@ -5148,7 +5241,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_POIS));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_POIS, dir, _BOOST(dam), 2);
             device_noticed = TRUE;
         }
@@ -5164,7 +5257,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_LITE));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_LITE, dir, _BOOST(dam), 4);
             device_noticed = TRUE;
         }
@@ -5180,7 +5273,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_DARK));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_DARK, dir, _BOOST(dam), 4);
             device_noticed = TRUE;
         }
@@ -5196,7 +5289,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_CONF));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_NETHER, dir, _BOOST(dam), 3);
             device_noticed = TRUE;
         }
@@ -5212,7 +5305,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_NETHER));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_NETHER, dir, _BOOST(dam), 3);
             device_noticed = TRUE;
         }
@@ -5228,7 +5321,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_NEXUS));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_NEXUS, dir, _BOOST(dam), 3);
             device_noticed = TRUE;
         }
@@ -5244,7 +5337,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_SOUND));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_SOUND, dir, _BOOST(dam), 3);
             device_noticed = TRUE;
         }
@@ -5260,7 +5353,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_SHARDS));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_SHARDS, dir, _BOOST(dam), 2);
             device_noticed = TRUE;
         }
@@ -5276,7 +5369,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_CHAOS));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_CHAOS, dir, _BOOST(dam), 5);
             device_noticed = TRUE;
         }
@@ -5292,7 +5385,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_DISEN));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_DISENCHANT, dir, _BOOST(dam), 3);
             device_noticed = TRUE;
         }
@@ -5308,7 +5401,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_TIME));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_TIME, dir, _BOOST(dam), 3);
             device_noticed = TRUE;
         }
@@ -5316,7 +5409,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
     }
     case EFFECT_BALL_WATER:
     {
-        int dam = _extra(effect, 100 + 3*effect->power/2);
+        int dam = _extra(effect, 100 + 2*effect->power);
         if (name) return "Whirlpool";
         if (desc) return "It fires a huge ball of water.";
         if (info) return info_damage(0, 0, _BOOST(dam));
@@ -5324,7 +5417,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", TERM_BLUE);
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_WATER, dir, _BOOST(dam), 4);
             device_noticed = TRUE;
         }
@@ -5340,7 +5433,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", TERM_L_BLUE);
         if (cast)
         {
-            if (device_known && !get_aim_dir(&dir)) return NULL;
+            if (device_known && !get_fire_dir(&dir)) return NULL;
             fire_ball(GF_MANA, dir, _BOOST(dam), 2);
             device_noticed = TRUE;
         }
@@ -5348,7 +5441,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
     }
     case EFFECT_BALL_DISINTEGRATE:
     {
-        int dam = _extra(effect, 200 + 3*effect->power/2);
+        int dam = _extra(effect, 25 + effect->power*3);
         if (name) return "Disintegrate";
         if (desc) return "It fires a powerful ball of disintegration.";
         if (info) return info_damage(0, 0, _BOOST(dam));
@@ -5356,7 +5449,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", TERM_SLATE);
         if (cast)
         {
-            if (device_known && !get_aim_dir(&dir)) return NULL;
+            if (device_known && !get_fire_dir(&dir)) return NULL;
             fire_ball(GF_DISINTEGRATE, dir, _BOOST(dam), 2);
             device_noticed = TRUE;
         }
@@ -5374,7 +5467,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_ACID));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_ACID, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
         }
@@ -5390,7 +5483,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_ELEC));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_ELEC, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
         }
@@ -5406,7 +5499,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_FIRE));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_FIRE, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
         }
@@ -5422,7 +5515,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_COLD));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_COLD, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
         }
@@ -5438,7 +5531,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_POIS));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_POIS, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
         }
@@ -5454,7 +5547,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_LITE));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_LITE, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
         }
@@ -5470,7 +5563,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_DARK));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_DARK, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
         }
@@ -5486,7 +5579,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_CONF));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_CONFUSION, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
         }
@@ -5502,7 +5595,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_NETHER));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_NETHER, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
         }
@@ -5518,7 +5611,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_NEXUS));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_NEXUS, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
         }
@@ -5534,7 +5627,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_SOUND));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_SOUND, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
         }
@@ -5550,7 +5643,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_SHARDS));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_SHARDS, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
         }
@@ -5566,7 +5659,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_CHAOS));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_CHAOS, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
         }
@@ -5582,7 +5675,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_DISEN));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_DISENCHANT, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
         }
@@ -5598,7 +5691,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_TIME));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_TIME, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
         }
@@ -5623,7 +5716,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
             };
             int which = randint0(5);
 
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             msg_format("It breathes %s.", _choices[which].desc);
             fire_ball(_choices[which].type, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
@@ -5646,7 +5739,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
             };
             int which = randint0(2);
 
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             msg_format("It breathes %s.", _choices[which].desc);
             fire_ball(_choices[which].type, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
@@ -5669,7 +5762,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
             };
             int which = randint0(2);
 
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             msg_format("It breathes %s.", _choices[which].desc);
             fire_ball(_choices[which].type, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
@@ -5694,7 +5787,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
             };
             int which = randint0(4);
 
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             msg_format("It breathes %s.", _choices[which].desc);
             fire_ball(_choices[which].type, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
@@ -5717,7 +5810,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
             };
             int which = randint0(2);
 
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             msg_format("It breathes %s.", _choices[which].desc);
             fire_ball(_choices[which].type, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
@@ -5734,7 +5827,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", TERM_VIOLET);
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_ball(GF_MISSILE, dir, _BOOST(dam), -2);
             device_noticed = TRUE;
         }
@@ -5859,7 +5952,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", TERM_L_DARK);
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             dam = _BOOST(dam);
             if (drain_life(dir, dam))
             {
@@ -5913,7 +6006,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
     }
     case EFFECT_ROCKET:
     {
-        int dam = _extra(effect, 275 + effect->power*3/2);
+        int dam = _extra(effect, 25 + effect->power*4);
         if (name) return "Rocket";
         if (desc) return "It fires a rocket.";
         if (info) return info_damage(0, 0, _BOOST(dam));
@@ -5921,7 +6014,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", TERM_UMBER);
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_rocket(GF_ROCKET, dir, _BOOST(dam), 2);
             device_noticed = TRUE;
         }
@@ -5938,7 +6031,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", TERM_UMBER);
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_METEOR, dir, _BOOST(damroll(dd, ds)));
             device_noticed = TRUE;
         }
@@ -5993,7 +6086,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", TERM_SLATE);
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             fire_bolt(GF_ARROW, dir, _BOOST(dam));
             device_noticed = TRUE;
         }
@@ -6238,6 +6331,31 @@ cptr do_effect(effect_t *effect, int mode, int boost)
             device_known = TRUE;
         }
         break;
+    case EFFECT_ENDLESS_QUIVER: /* should only be on a quiver ... */
+        if (name) return "Endless Quiver";
+        if (desc) return "Your quiver will refill with average ammo.";
+        if (value) return format("%d", 1500);
+        if (color) return format("%d", TERM_L_RED);
+        if (cast)
+        {
+            obj_t forge = {0};
+            int   tval = p_ptr->shooter_info.tval_ammo;
+
+            if (!tval) tval = TV_ARROW;
+
+            object_prep(&forge, lookup_kind(tval, SV_ARROW)); /* Hack: SV_ARROW == SV_BOLT == SV_PEBBLE */
+            forge.number = MAX(0, MIN(50, quiver_capacity() - quiver_count(NULL)));
+            obj_identify_fully(&forge);
+
+            if (!forge.number)
+                msg_print("Your quiver is full.");
+            else
+            {
+                msg_print("Your quiver refills.");
+                quiver_carry(&forge);
+            }
+        }
+        break;
     case EFFECT_WALL_BUILDING:
         if (name) return "Wall Building";
         if (desc) return "It creates a wall of stone.";
@@ -6260,7 +6378,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", TERM_BLUE);
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             if (sleep_monster(dir, _BOOST(power)))
                 device_noticed = TRUE;
         }
@@ -6273,7 +6391,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", TERM_UMBER);
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             if (slow_monster(dir))
                 device_noticed = TRUE;
         }
@@ -6288,7 +6406,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_CONF));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             if (confuse_monster(dir, _BOOST(power)))
                 device_noticed = TRUE;
         }
@@ -6304,7 +6422,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", res_color(RES_FEAR));
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             if (fear_monster(dir, _BOOST(power)))
                 device_noticed = TRUE;
         }
@@ -6317,7 +6435,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (color) return format("%d", TERM_ORANGE);
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             if (poly_monster(dir))
                 device_noticed = TRUE;
         }
@@ -6377,7 +6495,14 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (value) return format("%d", 5);
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            bool old_target_pet = target_pet;
+            target_pet = TRUE;
+            if (!get_fire_dir(&dir))
+            {
+                target_pet = old_target_pet;
+                return NULL;
+            }
+            target_pet = old_target_pet;
             if (heal_monster(dir, _BOOST(damroll(10, 10))))
                 device_noticed = TRUE;
         }
@@ -6388,7 +6513,14 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (value) return format("%d", 15);
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            bool old_target_pet = target_pet;
+            target_pet = TRUE;
+            if (!get_fire_dir(&dir))
+            {
+                target_pet = old_target_pet;
+                return NULL;
+            }
+            target_pet = old_target_pet;
             if (speed_monster(dir))
                 device_noticed = TRUE;
         }
@@ -6408,7 +6540,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (value) return format("%d", 10);
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             if (clone_monster(dir))
                 device_noticed = TRUE;
         }
@@ -6493,7 +6625,6 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         {
             object_type forge;
             char o_name[MAX_NLEN];
-            int slot;
 
             object_prep(&forge, lookup_kind(TV_ARROW, m_bonus(1, p_ptr->lev)+ 1));
             forge.number = (byte)rand_range(5, 10);
@@ -6505,9 +6636,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
             object_desc(o_name, &forge, 0);
             msg_format("It creates %s.", o_name);
 
-            slot = inven_carry(&forge);
-            if (slot >= 0) autopick_alter_item(slot, FALSE);
-
+            pack_carry(&forge);
             device_noticed = TRUE;
         }
         break;
@@ -6539,7 +6668,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (value) return format("%d", 1000);
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             ring_of_power(dir);
             device_noticed = TRUE;
         }
@@ -6550,7 +6679,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         if (value) return format("%d", 10000);
         if (cast)
         {
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             msg_print("You breathe the elements.");
 
             fire_ball(GF_MISSILE, dir, _BOOST(300), 4);
@@ -6624,7 +6753,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
         {
             /* TODO: Again, we need the underlying object ...
                For now, we safely assume the artifact is Bloody Moon. */
-            int slot = equip_find_artifact(ART_BLOOD);
+            int slot = equip_find_art(ART_BLOOD);
             if (slot)
             {
                 object_type *o_ptr = equip_obj(slot);
@@ -6685,7 +6814,7 @@ cptr do_effect(effect_t *effect, int mode, int boost)
                         Note: Effects might someday be triggered by spells, so passing
                         an object to this routine won't always make sense!
                      */
-                    int slot = equip_find_artifact(ART_MURAMASA);
+                    int slot = equip_find_art(ART_MURAMASA);
                     if (slot)
                     {
                         msg_print("The Muramasa is destroyed!");

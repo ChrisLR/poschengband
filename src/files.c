@@ -201,11 +201,13 @@ s16b tokenize(char *buf, s16b num, char **tokens, int mode)
     return (i);
 }
 
-/* tokenize, but with user supplied delimiters and no special backslash/quote handling */
+/* tokenize, but with user supplied delimiters and no special backslash/quote handling
+ * Added support for quoted delimiters, e.g. MON("fang, farmer maggot's dog", CLONE). */
 int z_string_split(char *buf, char **tokens, int max, cptr delim)
 {
     int i = 0;
     char *s = buf;
+    bool quote = FALSE;
 
     /* inch-worm alogorithm: s marks the start of the current token
        while t scans ahead for the next delimiter. buf is destroyed. */
@@ -215,7 +217,8 @@ int z_string_split(char *buf, char **tokens, int max, cptr delim)
 
         for (t = s; *t; t++)
         {
-            if (strchr(delim, *t)) break;
+            if (*t == '"') quote = !quote;
+            if (!quote && strchr(delim, *t)) break;
         }
 
         if (!*t) break;
@@ -242,6 +245,13 @@ void trim_tokens(char **tokens, int ct)
         while (*t && *t == ' ' && t > s)
             t--;
 
+        /* unquote */
+        if (*s && *s == '"' && *t && *t == '"' && t > s)
+        {
+            s++;
+            t--;
+        }
+
         t++;
         *t = '\0';
         tokens[i] = s;
@@ -254,7 +264,7 @@ int parse_args(char *buf, char **name, char **args, int max)
     char *s = buf;
     char *t;
     int   ct = 0;
-    
+
     for (t = s; *t; t++)
     {
         if (*t == '(') break;
@@ -510,16 +520,20 @@ errr process_pref_file_command(char *buf)
         }
         break;
 
-    /* Process "K:<num>:<a>/<c>"  -- attr/char for object kinds */
+    /* Process "K:<tval>:<sval>:<a>/<c>"  -- attr/char for object kinds
+     * N.B. Stop using k_idx some day ... map (tv, sv)->obj_kind_ptr instead. */
     case 'K':
-        if (tokenize(buf+2, 3, zz, TOKENIZE_CHECKQUOTE) == 3)
+        if (tokenize(buf+2, 4, zz, TOKENIZE_CHECKQUOTE) == 4)
         {
             object_kind *k_ptr;
-            i = (huge)strtol(zz[0], NULL, 0);
-            n1 = strtol(zz[1], NULL, 0);
-            n2 = strtol(zz[2], NULL, 0);
-            if (i >= max_k_idx) return 1;
-            k_ptr = &k_info[i];
+            int tval, sval, k_idx;
+            tval = strtol(zz[0], NULL, 0);
+            sval = strtol(zz[1], NULL, 0);
+            n1 = strtol(zz[2], NULL, 0);
+            n2 = strtol(zz[3], NULL, 0);
+            k_idx = lookup_kind(tval, sval);
+            if (!k_idx) return 1;
+            k_ptr = &k_info[k_idx];
             if (n1 || (!(n2 & 0x80) && n2)) k_ptr->x_attr = n1; /* Allow TERM_DARK text */
             if (n2) k_ptr->x_char = n2;
             return 0;
@@ -1290,7 +1304,7 @@ errr process_pref_file(cptr name)
 
     /* Build the filename */
     path_build(buf, sizeof(buf), ANGBAND_DIR_USER, name);
-    
+
     /* Process the user pref file */
     err2 = process_pref_file_aux(buf, PREF_TYPE_NORMAL);
 
@@ -1644,7 +1658,7 @@ void tim_player_flags(u32b flgs[OF_ARRAY_SIZE])
 
     if (p_ptr->tim_blood_shield)
     {
-        int amt = 100 * (p_ptr->mhp - p_ptr->chp) / p_ptr->mhp; 
+        int amt = 100 * (p_ptr->mhp - p_ptr->chp) / p_ptr->mhp;
         if (amt > 60)
             add_flag(flgs, OF_REFLECT);
     }
@@ -1836,8 +1850,8 @@ int ct_artifacts(void)
  */
 cptr map_name(void)
 {
-    if (p_ptr->inside_quest && is_fixed_quest_idx(p_ptr->inside_quest)
-        && (quest[p_ptr->inside_quest].flags & QUEST_FLAG_PRESET))
+    quest_ptr q = quests_get_current();
+    if (q && (q->flags & QF_GENERATE))
         return "Quest";
     else if (p_ptr->wild_mode)
         return "Surface";
@@ -1846,7 +1860,7 @@ cptr map_name(void)
     else if (p_ptr->inside_battle)
         return "Monster Arena";
     else if (!dun_level && p_ptr->town_num)
-        return town[p_ptr->town_num].name;
+        return town_name(p_ptr->town_num);
     else
         return d_name+d_info[dungeon_type].name;
 }
@@ -1906,8 +1920,16 @@ static errr file_character(cptr name)
 
     {
         doc_ptr doc = doc_alloc(80);
+        int     format = DOC_FORMAT_TEXT;
+        int     cb = strlen(name);
+
+        if (cb > 5 && strcmp(name + cb - 5, ".html") == 0)
+            format = DOC_FORMAT_HTML;
+        else if (cb > 4 && strcmp(name + cb - 4, ".htm") == 0)
+            format = DOC_FORMAT_HTML;
+
         py_display_character_sheet(doc);
-        doc_write_file(doc, fff, DOC_FORMAT_TEXT);
+        doc_write_file(doc, fff, format);
         doc_free(doc);
     }
 
@@ -2894,33 +2916,18 @@ void do_cmd_suicide(void)
  */
 void do_cmd_save_game(int is_autosave)
 {
-    /* Autosaves do not disturb */
-    if (is_autosave)
-    {
-        msg_print("Autosaving the game...");
-    }
-    else
-    {
-        /* Disturb the player */
+    if (!is_autosave)
         disturb(1, 0);
-    }
 
-    /* Clear messages
-    msg_print(NULL);*/
-
-    /* Handle stuff */
     handle_stuff();
 
-    /* Message */
-    prt("Saving game...", 0, 0);
+    if (!is_autosave)
+        prt("Saving game...", 0, 0);
 
-
-    /* Refresh */
     Term_fresh();
 
     /* The player is not dead */
     (void)strcpy(p_ptr->died_from, "(saved)");
-
 
     /* Forbid suspend */
     signals_ignore_tstp();
@@ -2928,15 +2935,13 @@ void do_cmd_save_game(int is_autosave)
     /* Save the player */
     if (save_player())
     {
-        prt("Saving game... done.", 0, 0);
-
+        if (!is_autosave)
+            prt("Saving game... done.", 0, 0);
     }
-
     /* Save failed (oops) */
     else
     {
         prt("Saving game... failed!", 0, 0);
-
     }
 
     /* Allow suspend again */
@@ -2985,13 +2990,11 @@ long total_points(void)
     int arena_win = MIN(p_ptr->arena_number, MAX_ARENA_MONS);
 
     if (!preserve_mode) mult += 10;
-    if (!autoroller) mult += 10;
     if (!smart_learn) mult -= 20;
     if (smart_cheat) mult += 30;
     if (ironman_shops) mult += 50;
     if (ironman_small_levels) mult += 10;
     if (ironman_empty_levels) mult += 20;
-    if (!powerup_home) mult += 50;
     if (ironman_rooms) mult += 100;
     if (ironman_nightmare) mult += 100;
 
@@ -3187,7 +3190,7 @@ static void print_tomb(void)
         /* Normal */
         else
         {
-            p =  player_title[p_ptr->pclass][(p_ptr->lev - 1) / 5];
+            p =  "Vanquished";
         }
 
         center_string(buf, player_name);
@@ -3248,38 +3251,16 @@ static void print_tomb(void)
  */
 static void show_info(void)
 {
-    int             i, j;
-    object_type        *o_ptr;
-    store_type        *st_ptr;
+    bool dumped = FALSE;
 
-    /* Hack -- Know everything in the inven/equip */
-    for (i = 0; i < INVEN_TOTAL; i++)
-    {
-        o_ptr = &inventory[i];
+    pack_for_each(obj_identify);
+    equip_for_each(obj_identify);
+    quiver_for_each(obj_identify);
+    home_for_each(obj_identify);
 
-        /* Skip non-objects */
-        if (!o_ptr->k_idx) continue;
-
-        /* Aware and Known */
-        obj_identify(o_ptr);
-    }
-
-    for (i = 1; i < max_towns; i++)
-    {
-        st_ptr = &town[i].store[STORE_HOME];
-
-        /* Hack -- Know everything in the home */
-        for (j = 0; j < st_ptr->stock_num; j++)
-        {
-            o_ptr = &st_ptr->stock[j];
-
-            /* Skip non-objects */
-            if (!o_ptr->k_idx) continue;
-
-            /* Aware and Known */
-            obj_identify(o_ptr);
-        }
-    }
+    pack_optimize();
+    quiver_optimize();
+    home_optimize();
 
     /* Hack -- Recalculate bonuses */
     p_ptr->update |= (PU_BONUS);
@@ -3312,8 +3293,13 @@ static void show_info(void)
         strcpy(out_val, "");
 
         /* Ask for filename (or abort) */
-        if (!askfor(out_val, 60)) return;
-
+        if (!askfor(out_val, 60))
+        {
+            if (dumped) return;
+            if (get_check("<color:v>Warning:</color> You forgot to grab a character dump. "
+                          "Are you sure you want to abort? ")) return;
+            continue;
+        }
         /* Return means "show on screen" */
         if (!out_val[0]) break;
 
@@ -3322,6 +3308,7 @@ static void show_info(void)
 
         /* Dump a character file */
         (void)file_character(out_val);
+        dumped = TRUE;
 
         /* Load screen */
         screen_load();
@@ -3657,7 +3644,7 @@ errr get_rnd_line(cptr file_name, int entry, char *output)
         if (!buf[0]) break;
 
         /* Copy the line */
-        if (one_in_(counter + 1)) 
+        if (one_in_(counter + 1))
             strcpy(output, buf);
     }
 

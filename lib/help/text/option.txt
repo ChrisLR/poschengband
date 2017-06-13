@@ -106,23 +106,6 @@ off after the creation is finished!
   before it is completely explored as any fixed artifact can be 
   regenerated in subsequent levels.
   
-  Allow use of autoroller for stats (autoroller)
-  If you choose to use the auto-roller, you can specify minimum limit 
-  of each stat. Once you have specified your desired statistics, the 
-  computer will then randomly roll successive start-up characters and 
-  compare them to your specified criteria. Each stat is rolled as a 
-  number from 8 to 17, with a normal distribution, and is then 
-  immediately modified based upon the race and class which you have 
-  chosen. Once a character that matches or exceeds your expectations 
-  has been rolled, the computer will display the character for you to 
-  look at, and asks you whether you accept or not. You may press Enter 
-  to accept. If you do not accept, you may press 'r' to resume rolling 
-  and searching for the next match or, if this is not your first match, 
-  'p' to return to the previous character which met your criteria.
-  
-  Increase capacity of your home (powerup_home)
-  If this option is enabled, the capacity of your home will be expanded 
-  to 20 pages. If not, capacity is only 2 pages.
   
 Input Options
   
@@ -135,10 +118,6 @@ Input Options
   up. Otherwise, you must use the g command, or the - command while 
   walking. Combined with carry_query_flag, allows you to selectively 
   pick up all items which you step on.
-  
-  Prompt before picking things up (carry_query_flag)
-  Forces the game to ask you if you want to pick something up when you 
-  do something that would normally cause the item to be picked up.
   
   Activate quick messages (quick_messages)
   Allows the use of any keypress as a response to the -more- prompt 
@@ -162,14 +141,24 @@ Input Options
             |   Command pets(p)         Search mode ON/OFF(S/#)  |
             +----------------------------------------------------+
   
-  Prompt for floor item selection (other_query_flag)
-  Forces the game to ask you before select an item on floor.
   
   Use old target by default (use_old_target)
-  Forces all commands which normally ask for a direction to use the 
-  current target if there is one. Use of this option can be dangerous 
-  if you target locations on the ground, unless you clear them when 
-  done.
+  This option forces all commands which normally ask for a direction to 
+  use the current target if there is one. Use of this option can be 
+  dangerous if you target locations on the ground, unless you clear 
+  them when done. Actually, position targets now automatically clear 
+  when they are no longer valid (e.g. after a teleport). Pay attention 
+  to the character info section of your screen as it always shows your 
+  current target, whether monster or location.
+  
+  Automatically target nearest monster (auto_target)
+  With this option enabled, every offensive spell you cast or device 
+  you use will automatically target the closest monster if there is not 
+  already a valid target selected. If you use this option, then it is 
+  highly recommended that you also enable the use_old_target option. 
+  That way, if you are in a situation where the automatic targeting is 
+  not what you want, you can just select a target up front before 
+  casting your spell.
   
   Repeat obvious commands (always_repeat)
   Tells the game that when you attempt to open a door or chest, bash a 
@@ -210,23 +199,48 @@ Input Options
   into it! Also the disarm command will automatically select one 
   direction if only one known trap is near you.
   
+  Automatically get nearby ammo (auto_get_ammo)
+  This option instructs the Auto-Get Objects command (^G) to 
+  automatically travel to nearby, visible ammo which is inscribed with 
+  =g (i.e., ammo which you have instructed the autopicker to 
+  automatically pickup). This enhancement is useful for archer builds 
+  after all nearby monsters have been slain. You might consider using 
+  the stronger auto_get_objects option instead.
+  
+  Automatically get nearby objects (auto_get_objects)
+  This option instructs the Auto-Get Objects command (^G) to 
+  automatically travel to nearby visible objects which you have 
+  registered to either pickup or destroy. This option subsumes (and 
+  extends) the auto_get_ammo option since ammo inscribed with =g is 
+  certainly registered for auto-pickup.
+  
   Display floor stacks in a list (easy_floor)
   Lets you select an item from a stack on the floor by browsing a list. 
   Also the look command will describe floor stack as "You see a stack 
   of n items.", when there is more than one item on a floor grid, and 
   display a list of items when you press 'x' at that time.
   
-  Allow casting spells when short of mana (over_exert)
-  Normally, you are prevented from casting spells when you don't have 
-  enough mana since accidentally doing so can have very nasty 
-  consequences, including death. If this option is set, then you are 
-  permitted to cast spells at such dangerous times, with a warning 
-  prompt, of course!
-  
   Use numpad keys as cursor keys in editor mode (numpad_as_cursorkey)
   This option makes numpad keys work as cursor movement keys while text 
   editing mode. Which include auto-picker editor, inputing an 
   inscription, a macro action, and etc.
+  
+  Use and Display Inventory Slots (use_pack_slots)
+  With this option, the object prompt will use and display the current 
+  inventory slot for objects in question. For example, if your food 
+  happens to currently be in slot h), the the Eat command will require 
+  you to press h to use this item. Without this option, each object 
+  prompt will begin labels at a). Some players prefer to keep the 
+  inventory slot, even though it constantly shifts as you add and 
+  remove new objects to your pack. Other players prefer to have 
+  commands use the same labels for the same objects upon successive 
+  calls (For example, pick up a spellbook and your food is now in the 
+  i) slot. This may puzzle you, since the last time you were hungry you 
+  pressed Eh, but now you need to press Ei. With this option turned 
+  off, eating rations of food will always be Ea ... at least until you 
+  pick up some mushrooms! However, if you do, then your eye will 
+  quickly perceive the presence of two items in the object prompt next 
+  time you Eat).
   
 Map & Screen Options
   
@@ -318,14 +332,14 @@ Map & Screen Options
   somewhat. Note that this option is only useful when using macros, 
   resting, running, or repeating commands, since the output is always 
   flushed when the game is waiting for a keypress from the user.
-      
+  
   Flush output after monster's move (fresh_after)
   This option forces the game to flush all output after not only every 
   player command, but also after every round of processing monsters and 
   objects, which will give you maximal information, but may slow down 
   the game a lot, especially on slower machines, and on faster machines 
   you normally do not have a chance to see the results anyway.
-      
+  
   Flush output after every message (fresh_message)
   This option forces the game to flush all output after every message 
   displayed by the game. This will give you maximal information, but 
@@ -336,7 +350,7 @@ Map & Screen Options
   machines, but horrible on most graphics machines. Note that only some 
   machines are able to *not* show the cursor, but on those machines, 
   hiding the cursor often speeds up the game and looks better.
-      
+  
   Display actual path before shooting (display_path)
   When this option is set, the targeting mode will show path from you 
   to current target point continuously.
@@ -437,6 +451,11 @@ Text Display Options
   lots of pets and don't wish to read a blow by blow account of the 
   battle raging around you.
   
+  Player character depends on their race (display_race)
+  With this option a player who plays as a Quylthulg, for example, will 
+  be represented by a Q. If the option is turned off the player will 
+  always be @. 
+  
 Game Play Options
   
   Merge inscriptions when stacking (stack_force_notes)
@@ -498,24 +517,23 @@ Disturbance Options
   
   Run past stairs (find_ignore_stairs)
   Ignore stairs when running.
-      
+  
   Run through open doors (find_ignore_doors)
   Ignore open doors when running.
-      
+  
   Run past known corners (find_cut)
   Cut sharply around known corners when running. This will result in 
   faster running, but may cause you to run into a lurking monster.
   
   Check for user abort while continuous command (check_abort)
-  Avoid checking to see if the user has pressed a key during resting or 
-  running or repeated commands. This not only makes the game much more 
-  efficient (on many systems), but also allows the use of certain 
-  obscure macro sequences, such as turning this option on, resting 
-  until done, turning this option off, and casting a spell. Note that 
-  the use of this option may be dangerous on certain "graphic" 
-  machines. Resting for long periods of time with this option set is 
-  dangerous since the resting may not stop until the user takes damage 
-  from starvation.
+  Turning this option off will avoid checking to see if the user has 
+  pressed a key during resting or running or repeated commands. This 
+  not only makes the game much more efficient (on many systems), but 
+  also allows the use of certain obscure macro sequences, such as 
+  turning this option off, resting until done, turning this option on, 
+  and casting a spell. Resting for long periods of time with this 
+  option turned off is dangerous since the resting may not stop until 
+  the user takes damage from starvation.
   
   Flush input on various failures (flush_failure)
   This option forces the game to flush all pending input whenever 
@@ -529,7 +547,7 @@ Disturbance Options
   character is "disturbed". This is useful if you use macros which take 
   time, since it will prevent you from continuing your macro while 
   being attacked by a monster.
-      
+  
   Disturb whenever any monster moves (disturb_move)
   Disturb the player when any monster moves, appears, or disappears. 
   This includes monsters which are only visible due to telepathy, so 
@@ -559,7 +577,7 @@ Disturbance Options
   Disturb whenever map panel changes (disturb_panel)
   This option causes you to be disturbed by the map scrolling, as it 
   does automatically when you get close to the edge of the screen.
-      
+  
   Disturb whenever player state changes (disturb_state)
   This option causes you to be disturbed whenever the player state 
   changes, including changes in hunger, resistance, confusion, etc.
@@ -571,7 +589,7 @@ Disturbance Options
   
   Audible bell (on errors, etc) (ring_bell)
   Attempt to make a bell noise when various errors occur.
-      
+  
   Disturb when leaving trap detected area (disturb_trap_detect)
   This option causes you to be disturbed when the player is running out 
   of trap-detected area.
@@ -595,12 +613,12 @@ Easy Auto-Destroyer Options
     version, then you should not also enable the easy 
     version.
   
-  Apply auto-destroy as sense feeling (destroy_feeling)
+  Apply auto-destroy on sensing an item (destroy_feeling)
   If this option is turned on, both The Mogaminator and The Easy 
   Destroyer will take actions whenever the player senses the quality of 
   an object (i.e., whenever pseudo-id kicks in).
   
-  Apply auto-destroy as identify an item (destroy_identify)
+  Apply auto-destroy on identifying an item (destroy_identify)
   If this option is turned on, both The Mogaminator and The Easy 
   Destroyer will take actions whenever the player identifies an object, 
   whether with a spell or with a magical device (but, alas, not via a 

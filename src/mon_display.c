@@ -126,19 +126,21 @@ static void _display_level(monster_race *r_ptr, doc_ptr doc)
     else if (_easy_lore(r_ptr) || r_ptr->r_tkills > 0)
     {
         if (r_ptr->max_level != 999)
-            doc_printf(doc, "<color:G>%d to %d</color>", (int)r_ptr->level, (int)r_ptr->max_level);
+            doc_printf(doc, "<color:G>%d to %d</color>", r_ptr->level, r_ptr->max_level);
         else
-            doc_printf(doc, "<color:G>%d</color>", (int)r_ptr->level);
+            doc_printf(doc, "<color:G>%d</color>", r_ptr->level);
     }
     else
         doc_insert(doc, "<color:y>?</color>");
     doc_newline(doc);
+    if (spoiler_hack)
+        doc_printf(doc, "Rarity  : <color:G>%d</color>\n", r_ptr->rarity);
 }
 static void _display_ac(monster_race *r_ptr, doc_ptr doc)
 {
     doc_insert(doc, "AC      : ");
     if (_know_armor_hp(r_ptr))
-        doc_printf(doc, "<color:G>%d</color>", (int)r_ptr->ac);
+        doc_printf(doc, "<color:G>%d</color>", r_ptr->ac);
     else
         doc_insert(doc, "<color:y>?</color>");
     doc_newline(doc);
@@ -164,7 +166,7 @@ static void _display_hp(monster_race *r_ptr, doc_ptr doc)
 }
 static void _display_speed(monster_race *r_ptr, doc_ptr doc)
 {                        /* v~~~~~~byte */
-    int speed = (int)r_ptr->speed - 110;
+    int speed = r_ptr->speed - 110;
     int rand = 0;
     doc_printf(doc, "Speed: <color:%c>%+d</color>", _speed_color(speed), speed);
 
@@ -223,6 +225,8 @@ static void _display_type(monster_race *r_ptr, doc_ptr doc)
         vec_add(v, string_copy_s("<color:y>Good</color>"));
     if (r_ptr->flags3 & RF3_UNDEAD)
         vec_add(v, string_copy_s("<color:v>Undead</color>"));
+    if (r_ptr->flags3 & RF3_NONLIVING)
+        vec_add(v, string_copy_s("<color:U>Nonliving</color>"));
     if (r_ptr->flags3 & RF3_AMBERITE)
         vec_add(v, string_copy_s("<color:v>Amberite</color>"));
     if (r_ptr->flags3 & RF3_DRAGON)
@@ -387,8 +391,42 @@ static void _display_resists(monster_race *r_ptr, doc_ptr doc)
 static void _display_frequency(monster_race *r_ptr, doc_ptr doc)
 {
     int pct = 0;
-    if (_easy_lore(r_ptr))
+    /* monster_race.freq_spell is often inaccurate and doesn't account for
+     * variable AI strategies (uniques) or to other in-game spell frequency
+     * adjustments (anger_ct or ASC avoidance). Personally, I'd much prefer
+     * to show the actual observed frequency. If you keep your lore for long
+     * (same savefile) then this will be more accurate over time. It will also
+     * more truly reflect your playstyle, and the game's adjustments to that
+     * style (if any). Finally, and this is just personal preference, I prefer
+     * to reset my lore every game. Then, I have a nice handy record of all the
+     * battles I have fought. I can look up uniques and see what they did and
+     * how often they did it. If I remember a tough unique, I can consult the lore
+     * and see ... hmmm, Fangorn tossed boulders on 7 of 8 moves. Showing the
+     * "True Frequency" of 25% is not what I saw, and I really only care about
+     * my actual experiences, not my theoretical ones. But again, this is me, and
+     * I tend to use lore in a backward fashion (after the fact).
+     * Exceptions to my personal preference are for spoilers (ignore) and for
+     * probing. If the player probes a monster, then, in this case, we should indeed
+     * show the r_info spell frequency. At least if it is a new monster that we
+     * have yet to observe in action.
+     * Here is an example:
+     * Spells: 25.00% (11 of 21 moves) (easy_lore turned on)
+     * Spells: 52.38% (11 of 21 moves) (easy_lore turned off)
+     * One of these is grossly inaccurate. People have complained ...
+     * (BTW, _easy_lore() is much broader than easy_lore)
+     *
+     * UPDATE: If a monster has no non-innate attacks, you can correct the frequency
+     * as follows: f = 2 f*f / 100. So, Light Hounds spell 1_IN_5 for f = 20. This
+     * really needs to be f = 2 * 20 * 20 / 100 = 8. cf mspells1.c where I commented
+     * on this oddness (Hengband). Orc shooters are even worse: 1_IN_15 is actually
+     * more like 1 in 139! But 33% casting only goes down to ~22%, which is probably
+     * what is was designed for. */
+    if ( spoiler_hack
+      || easy_lore
+      || (!r_ptr->r_spell_turns && (r_ptr->r_xtra1 & MR1_LORE)) ) /* probing */
+    {
         pct = r_ptr->freq_spell * 100;
+    }
     else if (r_ptr->r_spell_turns)
     {
         int total = r_ptr->r_spell_turns + r_ptr->r_move_turns;
@@ -399,7 +437,8 @@ static void _display_frequency(monster_race *r_ptr, doc_ptr doc)
         vec_ptr v = vec_alloc((vec_free_f)string_free);
 
         doc_printf(doc, "Spells  : <indent><color:G>%d.%02d%%</color> ", pct/100, pct%100);
-        doc_printf(doc, "(%d of %d moves) ", r_ptr->r_spell_turns, r_ptr->r_spell_turns + r_ptr->r_move_turns);
+        if (!spoiler_hack && r_ptr->r_spell_turns + r_ptr->r_move_turns > 0)
+            doc_printf(doc, "(%d of %d moves) ", r_ptr->r_spell_turns, r_ptr->r_spell_turns + r_ptr->r_move_turns);
 
         if (r_ptr->flags2 & RF2_SMART)
             vec_add(v, string_copy_s("<color:y>Intelligent</color>"));
@@ -810,6 +849,12 @@ static void _display_other(monster_race *r_ptr, doc_ptr doc)
     int        ct = 0;
     vec_ptr    v = vec_alloc((vec_free_f)string_free);
 
+    if (r_ptr->flags2 & RF2_KILL_WALL)
+        vec_add(v, string_copy_s("<color:U>Eats Walls</color>"));
+
+    if (r_ptr->flags2 & RF2_PASS_WALL)
+        vec_add(v, string_copy_s("<color:B>Passes through Walls</color>"));
+
     if (r_ptr->flags2 & RF2_REFLECTING)
         vec_add(v, string_copy_s("<color:o>Reflection</color>"));
 
@@ -940,27 +985,34 @@ static void _display_kills(monster_race *r_ptr, doc_ptr doc)
 {
     if (r_ptr->flags1 & RF1_UNIQUE)
     {
-        doc_insert(doc, "Status  : ");
-        if (r_ptr->max_num == 0)
-            doc_insert(doc, "<color:D>Dead</color>");
-        else if (mon_is_wanted(r_ptr->id))
-            doc_insert(doc, "<color:v>Wanted</color>");
+        if (spoiler_hack)
+            doc_insert(doc, "Status  : <color:v>Unique</color>");
         else
-            doc_insert(doc, "<color:y>Alive</color>");
+        {
+            doc_insert(doc, "Status  : ");
+            if (r_ptr->max_num == 0)
+                doc_insert(doc, "<color:D>Dead</color>");
+            else if (mon_is_wanted(r_ptr->id))
+                doc_insert(doc, "<color:v>Wanted</color>");
+            else
+                doc_insert(doc, "<color:y>Alive</color>");
+        }
         doc_newline(doc);
     }
-    else
+    else if (!spoiler_hack)
     {
         doc_printf(doc, "Kills   : <color:G>%d</color>\n", r_ptr->r_pkills);
     }
 
     if (_easy_lore(r_ptr) || r_ptr->r_tkills)
     {
-        int xp = r_ptr->mexp * r_ptr->level / (p_ptr->max_plv + 2);
+        int plev = spoiler_hack ? 50 : p_ptr->max_plv;
+        int xp = r_ptr->mexp * r_ptr->level / (plev + 2);
         char buf[10];
 
+        if (quickband) xp *= 2;
         big_num_display(xp, buf);
-        doc_printf(doc, "Exp     : <color:G>%s</color> at CL%d\n", buf, p_ptr->max_plv);
+        doc_printf(doc, "Exp     : <color:G>%s</color> at CL%d\n", buf, plev);
     }
 
     _display_drops(r_ptr, doc);
@@ -1023,7 +1075,6 @@ void mon_display_doc(monster_race *r_ptr, doc_ptr doc)
 
         /* Assume some "obvious" flags */
         if (r_ptr->flags1 & RF1_UNIQUE)  copy.flags1 |= RF1_UNIQUE;
-        if (r_ptr->flags1 & RF1_QUESTOR) copy.flags1 |= RF1_QUESTOR;
         if (r_ptr->flags1 & RF1_MALE)    copy.flags1 |= RF1_MALE;
         if (r_ptr->flags1 & RF1_FEMALE)  copy.flags1 |= RF1_FEMALE;
 

@@ -607,10 +607,19 @@ static caster_info * _caster_info(void)
     if (!init)
     {
         me.magic_desc = "wild spell";
-        me.weight = 450;
+        me.encumbrance.max_wgt = 450;
+        me.encumbrance.weapon_pct = 0;
+        me.encumbrance.enc_wgt = 800;
         init = TRUE;
     }
     return &me;
+}
+
+static void _birth(void)
+{
+    py_birth_obj_aux(TV_SWORD, SV_SMALL_SWORD, 1);
+    py_birth_obj_aux(TV_SOFT_ARMOR, SV_SOFT_LEATHER_ARMOR, 1);
+    py_birth_obj_aux(TV_POTION, SV_POTION_SPEED, 1);
 }
 
 class_t *wild_talent_get_class(void)
@@ -650,7 +659,10 @@ class_t *wild_talent_get_class(void)
         me.base_hp = 4;
         me.exp = 110;
         me.pets = 35;
+        me.flags = CLASS_SENSE1_FAST | CLASS_SENSE1_WEAK |
+                   CLASS_SENSE2_MED | CLASS_SENSE2_STRONG;
         
+        me.birth = _birth;
         me.calc_bonuses = _calc_bonuses;
         me.calc_stats = _calc_stats;
         me.get_flags = _get_flags;

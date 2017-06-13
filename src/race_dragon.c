@@ -41,7 +41,10 @@ static void _dragon_birth(void)
     forge.pval = 1;
     add_flag(forge.flags, OF_STR);
     add_flag(forge.flags, OF_DEX);
-    add_outfit(&forge);
+    py_birth_obj(&forge);
+
+    py_birth_food();
+    py_birth_light();
 }
 
 /**********************************************************************
@@ -300,7 +303,7 @@ static void _breathe_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (get_aim_dir(&dir))
+        if (get_fire_dir(&dir))
         {
             int e = _breath_effect();
             int dam = _breath_amount();
@@ -426,12 +429,12 @@ static void _calc_innate_attacks(void)
  * Dragon Realms
  **********************************************************************/
 static dragon_realm_t _realms[DRAGON_REALM_MAX] = {
-    { "None", 
+    { DRAGON_REALM_NONE, "None", 
         "",
     /*  S   I   W   D   C   C    Dsrm Dvce Save Stlh Srch Prcp Thn Thb  Life  Exp Attack Breath*/
       { 0,  0,  0,  0,  0,  0}, {   0,   0,   0,   0,   0,   0,  0,  0}, 100, 100,   100,   100, A_NONE},
 
-    { "Lore", 
+    { DRAGON_REALM_LORE, "Lore", 
         "Dragons specializing in lore are seekers of knowledge. They are the most "
         "intelligent of dragonkind and use their vast intellects to drive their magic. "
         "Armed with a vast array of detection and knowledge spells, dragons of lore "
@@ -441,7 +444,7 @@ static dragon_realm_t _realms[DRAGON_REALM_MAX] = {
     /*  S   I   W   D   C   C    Dsrm Dvce Save Stlh Srch Prcp Thn Thb  Life  Exp Attack Breath*/
       {-1, +3,  0, -1, -1,  0}, {   3,   8,   2,   0,   5,   5, -8,  0}, 100,  80,   100,   100, A_INT},
 
-    { "Breath", 
+    { DRAGON_REALM_BREATH, "Breath", 
         "Dragon breath is the stuff of legends, and this realm seeks to enhance this most "
         "powerful attribute of dragonkind. With this speciality, you will be able to shape "
         "and control your breaths to maximize deadliness for a given situation. In addition, "
@@ -451,7 +454,7 @@ static dragon_realm_t _realms[DRAGON_REALM_MAX] = {
     /*  S   I   W   D   C   C    Dsrm Dvce Save Stlh Srch Prcp Thn Thb  Life  Exp Attack Breath*/
       { 0, -1, -1,  0, +3, +1}, {   0,   0,   3,  -1,   0,   0,  0,  0}, 103, 105,    90,   115, A_CON},
 
-    { "Attack", 
+    { DRAGON_REALM_ATTACK, "Attack", 
         "Attack dragons seek melee supremacy above all else. This realm offers powerful attack "
         "spells to support a race that is already among the melee elite, and the result can "
         "be truly awe-inspiring. With this realm, the dragon may rend their opponents with "
@@ -462,7 +465,7 @@ static dragon_realm_t _realms[DRAGON_REALM_MAX] = {
     /*  S   I   W   D   C   C    Dsrm Dvce Save Stlh Srch Prcp Thn Thb  Life  Exp Attack Breath*/
       {+3, -2, -2, +1, -1,  0}, {  -5,  -5,  -3,  -1,  -2,  -2, 15,  0},  97, 105,   115,    80, A_STR},
 
-    { "Craft", 
+    { DRAGON_REALM_CRAFT, "Craft", 
         "The most powerful magical items have long been believed forged by dragonflame. The "
         "craft dragon gains powers of enchantment and may even reforge artifacts into the objects "
         "of their choosing! Otherwise, craft dragons are not particularly powerful as they trade "
@@ -471,7 +474,7 @@ static dragon_realm_t _realms[DRAGON_REALM_MAX] = {
     /*  S   I   W   D   C   C    Dsrm Dvce Save Stlh Srch Prcp Thn Thb  Life  Exp Attack Breath*/
       {-1, -1, +3, -1, -1, -1}, {   3,  15,   3,   0,   0,   0, -5,  0}, 100,  95,   100,   100, A_WIS},
 
-    { "Armor", 
+    { DRAGON_REALM_ARMOR, "Armor", 
         "Dragon scales have thwarted many a would be dragonslayer. Naturally tough and resistant, "
         "the dragon's armor is even further enhanced by this realm. This specialization gives enhanced "
         "armor class, reflection, resistance to cuts and stunning, resistance to poison "
@@ -482,7 +485,7 @@ static dragon_realm_t _realms[DRAGON_REALM_MAX] = {
     /*  S   I   W   D   C   C    Dsrm Dvce Save Stlh Srch Prcp Thn Thb  Life  Exp Attack Breath*/
       {-1, -1, -1, +3, +1, +1}, {  -2,  -3,   7,   1,   0,   0,-10,  0}, 102, 105,    90,    90, A_DEX},
 
-    { "Domination", 
+    { DRAGON_REALM_DOMINATION, "Domination", 
         "All dragons have a formidable presence and make fearsome opponents. But Domination dragons "
         "are truly a breed apart seeking to bend and control the will of all they meet. Convinced "
         "of their right to rule, these dragons may subjugate the weak, terrify the uncertain, "
@@ -494,7 +497,7 @@ static dragon_realm_t _realms[DRAGON_REALM_MAX] = {
     /*  S   I   W   D   C   C    Dsrm Dvce Save Stlh Srch Prcp Thn Thb  Life  Exp Attack Breath*/
       {-1, -1, -1, -1, -1, +3}, {  -2,  -3,  -2,   0,   0,   0, -7,  0},  95, 105,    95,    90, A_CHR},
 
-    { "Crusade", 
+    { DRAGON_REALM_CRUSADE, "Crusade", 
         "Crusade dragons are on a mission to destroy the forces of evil. As such, this realm is only "
         "available to Gold Dragons and Law Dragons. Being of a single focus, the Crusade dragon is not "
         "as powerful in melee or breaths as other dragons, but their spells more than make up for this "
@@ -506,7 +509,7 @@ static dragon_realm_t _realms[DRAGON_REALM_MAX] = {
     /*  S   I   W   D   C   C    Dsrm Dvce Save Stlh Srch Prcp Thn Thb  Life  Exp Attack Breath*/
       {+1, -1, -1, +1, -1, +2}, {  -5,   0,  -2,   0,  -2,  -2,  7,  0},  95, 107,    90,    90, A_CHR},
 
-    { "Death", 
+    { DRAGON_REALM_DEATH, "Death", 
         "Death dragons are enemies of life itself, seeking to destroy all living creatures. With this "
         "realm, the dragon may bend their breath weapon to suit their necromantic desires, eventually "
         "breathing mastery over both death and life. At high levels, the death dragon's melee attacks "
@@ -534,7 +537,9 @@ static caster_info * _caster_info(void)
     if (!init)
     {
         me.magic_desc = "dragon spell";
-        me.weight = 750;
+        me.encumbrance.max_wgt = 750;
+        me.encumbrance.weapon_pct = 0;
+        me.encumbrance.enc_wgt = 800;
         init = TRUE;
     }
     me.which_stat = _get_realm()->spell_stat; /* Careful: Birthing may invoke this multiple times with different realms */
@@ -578,7 +583,7 @@ static void _bolt_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (get_aim_dir(&dir))
+        if (get_fire_dir(&dir))
         {
             int e = _breath_effect();
             int dam = MAX(1, _breath_amount()/2);
@@ -619,7 +624,7 @@ static void _beam_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (get_aim_dir(&dir))
+        if (get_fire_dir(&dir))
         {
             int e = _breath_effect();
             int dam = _breath_amount();
@@ -660,7 +665,7 @@ static void _cone_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (get_aim_dir(&dir))
+        if (get_fire_dir(&dir))
         {
             int e = _breath_effect();
             int dam = _breath_amount();
@@ -701,7 +706,7 @@ static void _split_beam_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (get_aim_dir(&dir))
+        if (get_fire_dir(&dir))
         {
             int e = _breath_effect();
             int dam = MAX(1, _breath_amount()/2);
@@ -712,7 +717,7 @@ static void _split_beam_spell(int cmd, variant *res)
             
             command_dir = 0; /* Code is buggy asking for a direction 2x in a single player action! */
             target_who = 0;  /* TODO: Repeat command is busted ... */
-            if (get_aim_dir(&dir))
+            if (get_fire_dir(&dir))
                 fire_beam(e, dir, dam);
 
             var_set_bool(res, TRUE);
@@ -745,7 +750,7 @@ static void _retreating_breath_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (get_aim_dir(&dir))
+        if (get_fire_dir(&dir))
         {
             int e = _breath_effect();
             int dam = _breath_amount();
@@ -796,7 +801,7 @@ static void _deadly_breath_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (get_aim_dir(&dir))
+        if (get_fire_dir(&dir))
         {
             int e = _breath_effect();
             int dam = _breath_amount() * 125 / 100;
@@ -891,6 +896,42 @@ static void _detect_magic_spell(int cmd, variant *res)
     }
 }
 
+static obj_ptr _get_reforge_src(int max_power)
+{
+    obj_prompt_t prompt = {0};
+    char buf[255];
+
+    sprintf(buf, "Use what artifact for reforging (Max Power = %d)? ", max_power);
+    prompt.prompt = buf;
+    prompt.error = "You have no artifacts to reforge.";
+    prompt.filter = object_is_artifact;
+    prompt.where[0] = INV_PACK;
+    prompt.where[1] = INV_FLOOR;
+    prompt.flags = INV_SHOW_VALUE;
+
+    obj_prompt(&prompt);
+    return prompt.obj;
+}
+
+static obj_ptr _get_reforge_dest(int max_power)
+{
+    obj_prompt_t prompt = {0};
+    char buf[255];
+
+    sprintf(buf, "Reforge which object (Max Power = %d)? ", max_power);
+    prompt.prompt = buf;
+    prompt.error = "You have nothing to reforge.";
+    prompt.filter = item_tester_hook_nameless_weapon_armour;
+    prompt.where[0] = INV_PACK;
+    prompt.where[1] = INV_EQUIP;
+    prompt.where[2] = INV_QUIVER;
+    prompt.where[3] = INV_FLOOR;
+    prompt.flags = INV_SHOW_VALUE;
+
+    obj_prompt(&prompt);
+    return prompt.obj;
+}
+
 static void _reforging_spell(int cmd, variant *res)
 {
     switch (cmd)
@@ -903,21 +944,16 @@ static void _reforging_spell(int cmd, variant *res)
         break;
     case SPELL_CAST:
     {
-        int src_idx, dest_idx, cost;
+        int cost;
         char o_name[MAX_NLEN];
-        char buf[255];
-        object_type *src, *dest;
+        obj_ptr src, dest;
         int power = p_ptr->lev * 5 / 2 + (p_ptr->lev >= 50 ? 5 : 0);
         int src_max_power = power * power * 10;
         int dest_max_power = 0;
 
         var_set_bool(res, FALSE);
-        item_tester_hook = object_is_artifact;
-        sprintf(buf, "Use what artifact for reforging (Max Power = %d)? ", src_max_power);
-        if (!get_item(&src_idx, buf, "You have no artifacts to reforge.", USE_INVEN | SHOW_VALUE))
-            return;
-
-        src = &inventory[src_idx];
+        src = _get_reforge_src(src_max_power);
+        if (!src) return;
         if (!object_is_artifact(src)) /* paranoia */
         {
             msg_print("You must choose an artifact for reforging.");
@@ -939,12 +975,8 @@ static void _reforging_spell(int cmd, variant *res)
         if (!get_check(format("Really use %s? (It will be destroyed!) ", o_name))) 
             return;
 
-        sprintf(buf, "Reforge which object (Max Power = %d)? ", dest_max_power);
-        item_tester_hook = item_tester_hook_nameless_weapon_armour;
-        if (!get_item(&dest_idx, buf, "You have nothing to reforge.", USE_EQUIP | USE_INVEN | SHOW_VALUE))
-            return;
-
-        dest = &inventory[dest_idx];
+        dest = _get_reforge_dest(dest_max_power);
+        if (!dest) return;
 
         if (dest->number > 1)
         {
@@ -982,8 +1014,8 @@ static void _reforging_spell(int cmd, variant *res)
             return;
         }
 
-        inven_item_increase(src_idx, -1);
-        inven_item_describe(src_idx);
+        src->number--;
+        obj_release(src, 0);
 
         obj_identify_fully(dest);
 
@@ -992,8 +1024,6 @@ static void _reforging_spell(int cmd, variant *res)
         handle_stuff();
 
         obj_display(dest);
-
-        inven_item_optimize(src_idx);
 
         var_set_bool(res, TRUE);
         break;
@@ -1400,7 +1430,7 @@ static void _breathe_spell_aux(int effect, int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (get_aim_dir(&dir))
+        if (get_fire_dir(&dir))
         {
             int dam = _breath_amount();
 
@@ -1660,7 +1690,7 @@ static void _breathe_unholiness_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (get_aim_dir(&dir))
+        if (get_fire_dir(&dir))
         {
             int dam = _breath_amount() * 3 / 2;
 
@@ -1766,7 +1796,7 @@ static void _enslave_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         charm_monster(dir, p_ptr->lev * 2);
         var_set_bool(res, TRUE);
         break;
@@ -1810,7 +1840,7 @@ static void _breathe_subjugation_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (get_aim_dir(&dir))
+        if (get_fire_dir(&dir))
         {
             int dam = subjugation_power();
 
@@ -2092,7 +2122,7 @@ static void _reach_spell(int cmd, variant *res)
             int dir = 5;
             var_set_bool(res, FALSE);
             project_length = 2 + p_ptr->lev/40;
-            if (!get_aim_dir(&dir)) return;
+            if (!get_fire_dir(&dir)) return;
             p_ptr->innate_attacks[0].flags |= INNATE_SKIP;
             project_hook(GF_ATTACK, dir, 0, PROJECT_STOP | PROJECT_KILL);
             p_ptr->innate_attacks[0].flags &= ~INNATE_SKIP;

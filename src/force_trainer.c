@@ -25,7 +25,7 @@ static void _small_force_ball_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (get_aim_dir(&dir))
+        if (get_fire_dir(&dir))
         {
             int dice = 3 + ((p_ptr->lev - 1) / 5) + _force_boost()/ 12;
             int sides = 4;
@@ -89,7 +89,7 @@ static void _kamehameha_spell(int cmd, variant *res)
         int dir = 0;
         project_length = p_ptr->lev / 8 + 3;
         var_set_bool(res, FALSE);
-        if (get_aim_dir(&dir))
+        if (get_fire_dir(&dir))
         {
             int dice = 5 + ((p_ptr->lev - 1) / 5) + _force_boost() / 10;
             int sides = 5;
@@ -217,7 +217,7 @@ static void _shock_power_spell(int cmd, variant *res)
     {
         int y, x, dam, dir;
         project_length = 1;
-        if (!get_aim_dir(&dir))
+        if (!get_fire_dir(&dir))
         { 
             var_set_bool(res, FALSE);
             return;
@@ -305,7 +305,7 @@ static void _large_force_ball_spell(int cmd, variant *res)
     {
         int dir;
         var_set_bool(res, FALSE);
-        if (get_aim_dir(&dir))
+        if (get_fire_dir(&dir))
         {
             int dice = 10;
             int sides = 6;
@@ -408,7 +408,7 @@ static void _super_kamehameha_spell(int cmd, variant *res)
         int sides = 15;
         
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
 
         fire_beam(
             GF_MANA,
@@ -539,6 +539,7 @@ static int _get_powers(spell_info* spells, int max)
 
 static void _calc_bonuses(void)
 {
+    p_ptr->monk_lvl = (p_ptr->lev * 94 + 50) / 100;
     if (p_ptr->lev >= 15) 
         p_ptr->clear_mind = TRUE;
 
@@ -557,6 +558,7 @@ static void _get_flags(u32b flgs[OF_ARRAY_SIZE])
 {
     if (!heavy_armor())
     {
+        add_flag(flgs, OF_AURA_REVENGE);
         if (p_ptr->lev >= 10)
             add_flag(flgs, OF_SPEED);
         if (p_ptr->lev >= 25)
@@ -593,12 +595,32 @@ static caster_info * _caster_info(void)
     {
         me.magic_desc = "force";
         me.which_stat = A_WIS;
-        me.weight = 350;
+        me.encumbrance.max_wgt = 350;
+        me.encumbrance.weapon_pct = 100;
+        me.encumbrance.enc_wgt = 800;
         me.on_fail = _on_fail;
         me.on_cast = _on_cast;
         init = TRUE;
     }
     return &me;
+}
+
+static void _birth(void)
+{
+    py_birth_obj_aux(TV_SOFT_ARMOR, SV_SOFT_LEATHER_ARMOR, 1);
+    py_birth_obj_aux(TV_POTION, SV_POTION_CLARITY, rand_range(5, 10));
+    py_birth_spellbooks();
+}
+
+static void _character_dump(doc_ptr doc)
+{
+    spell_info spells[MAX_SPELLS];
+    int        ct = _get_spells(spells, MAX_SPELLS);
+
+    spellbook_character_dump(doc);
+
+    doc_insert(doc, "<color:r>Realm:</color> <color:B>Force</color>\n");
+    py_display_spells_aux(doc, spells, ct);
 }
 
 class_t *force_trainer_get_class(void)
@@ -643,13 +665,16 @@ class_t *force_trainer_get_class(void)
         me.base_hp = 4;
         me.exp = 135;
         me.pets = 40;
+        me.flags = CLASS_SENSE1_MED | CLASS_SENSE1_WEAK |
+                   CLASS_SENSE2_MED | CLASS_SENSE2_STRONG;
 
+        me.birth = _birth;
         me.calc_bonuses = _calc_bonuses;
         me.get_flags = _get_flags;
         me.caster_info = _caster_info;
         me.get_spells = _get_spells;
         me.get_powers = _get_powers;
-        me.character_dump = spellbook_character_dump;
+        me.character_dump = _character_dump;
         init = TRUE;
     }
 

@@ -254,21 +254,10 @@ void _blood_revenge_spell(int cmd, variant *res)
     }
 }
 
+static bool _is_blood_potion(obj_ptr obj)
+    { return obj->tval == TV_POTION && obj->sval == SV_POTION_BLOOD; }
 static int _count_blood_potions(void)
-{
-    int result = 0, i;
-    for (i = 0; i < INVEN_PACK; i++)
-    {
-        object_type *o_ptr = &inventory[i];
-
-        if (!o_ptr->k_idx) continue;
-
-        if (o_ptr->tval == TV_POTION && o_ptr->sval == SV_POTION_BLOOD)
-            result += o_ptr->number;
-    }
-
-    return result;
-}
+    { return pack_count(_is_blood_potion); }
 
 void _blood_pool_spell(int cmd, variant *res)
 {
@@ -300,18 +289,8 @@ void _blood_pool_spell(int cmd, variant *res)
         msg_print("You feel light headed.");
         object_prep(&forge, lookup_kind(TV_POTION, SV_POTION_BLOOD));
 
-        /* We can't just drop potions on the ground, or the user can spam the spell! */
-        if (!inven_carry_okay(&forge))
-        {
-            msg_print("Your pack is full!  The potion goes sour ...");
-            object_prep(&forge, lookup_kind(TV_POTION, SV_POTION_SALT_WATER));
-            drop_near(&forge, -1, py, px);
-        }
-        else
-        {
-            inven_carry(&forge);
-            msg_print("You store your blood for future use.");
-        }
+        pack_carry(&forge);
+        msg_print("You store your blood for future use.");
         var_set_bool(res, TRUE);
         break;
     }
@@ -533,10 +512,16 @@ static caster_info * _caster_info(void)
         me.options = CASTER_USE_HP;
         me.which_stat = A_CON;
         me.on_cast = _on_cast;
-        me.weight = 1000;
         init = TRUE;
     }
     return &me;
+}
+
+static void _birth(void)
+{
+    py_birth_obj_aux(TV_SWORD, SV_BROAD_SWORD, 1);
+    py_birth_obj_aux(TV_HARD_ARMOR, SV_CHAIN_MAIL, 1);
+    py_birth_obj_aux(TV_POTION, SV_POTION_CURE_CRITICAL, rand_range(2, 5));
 }
 
 class_t *blood_knight_get_class(void)
@@ -578,7 +563,9 @@ class_t *blood_knight_get_class(void)
         me.base_hp = 20;
         me.exp = 150;
         me.pets = 40;
+        me.flags = CLASS_SENSE1_FAST | CLASS_SENSE1_STRONG;
 
+        me.birth = _birth;
         me.calc_bonuses = _calc_bonuses;
         me.get_flags = _get_flags;
         me.calc_weapon_bonuses = _calc_weapon_bonuses;

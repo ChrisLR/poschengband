@@ -36,6 +36,11 @@ static void _birth(void)
     msg_print("You feel the luck of the Irish!");
     mut_gain(MUT_GOOD_LUCK);
     mut_lock(MUT_GOOD_LUCK);
+
+    p_ptr->au = 50000;
+
+    py_birth_food();
+    py_birth_light();
 }
 
 static int _get_toggle(void)
@@ -276,16 +281,6 @@ static void _get_flags(u32b flgs[OF_ARRAY_SIZE])
     }
 }
 
-static void _calc_shooter_bonuses(object_type *o_ptr, shooter_info_t *info_ptr)
-{
-    if ( !p_ptr->shooter_info.heavy_shoot
-      && info_ptr->tval_ammo <= TV_BOLT
-      && info_ptr->tval_ammo >= TV_SHOT )
-    {
-        p_ptr->shooter_info.num_fire += MIN(p_ptr->au / 100000, 100);
-    }
-}
-
 static void _calc_weapon_bonuses(object_type *o_ptr, weapon_info_t *info_ptr)
 {
     info_ptr->xtra_blow += MIN(p_ptr->au / 100000, 100);
@@ -379,17 +374,10 @@ bool leprechaun_steal(int m_idx)
                 if (prace_is_(RACE_MON_LEPRECHAUN))
                     p_ptr->update |= (PU_BONUS | PU_HP | PU_MANA);
             }
-            else if (!inven_carry_okay(&loot))
-            {
-                msg_format("You have no room for %s.", o_name);
-                drop_near(&loot, -1, py, px);
-            }
             else
             {
-                int slot = inven_carry(&loot);
-
-                msg_format("You steal %s (%c).", o_name, index_to_label(slot));
-                autopick_alter_item(slot, TRUE);
+                pack_carry(&loot);
+                msg_format("You steal %s.", o_name);
             }
         }
     }
@@ -452,7 +440,6 @@ race_t *mon_leprechaun_get_race(void)
         me.calc_innate_attacks = _calc_innate_attacks;
         me.calc_bonuses = _calc_bonuses;
         me.calc_weapon_bonuses = _calc_weapon_bonuses;
-        me.calc_shooter_bonuses = _calc_shooter_bonuses;
         me.get_flags = _get_flags;
         me.gain_level = _gain_level;
         me.birth = _birth;
@@ -468,7 +455,8 @@ race_t *mon_leprechaun_get_race(void)
     if (!spoiler_hack)
         me.life += MIN(p_ptr->au / 500000, 20);
 
-    me.subname = titles[rank];
+    if (!birth_hack && !spoiler_hack)
+        me.subname = titles[rank];
     me.stats[A_STR] = -2 - 2*rank;
     me.stats[A_INT] = 1;
     me.stats[A_WIS] = 1;

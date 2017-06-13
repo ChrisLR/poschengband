@@ -113,7 +113,7 @@ void _neural_blast_spell(int cmd, variant *res)
         int sides = (3 + p_ptr->lev / 15);
         var_set_bool(res, FALSE);
 
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
 
         if (randint1(100) < p_ptr->lev * 2)
             fire_beam(GF_PSI, dir, spell_power(damroll(dice, sides) + p_ptr->to_d_spell));
@@ -220,7 +220,7 @@ void _domination_spell(int cmd, variant *res)
         if (p_ptr->lev < 30)
         {
             int dir = 0;
-            if (!get_aim_dir(&dir)) return;
+            if (!get_fire_dir(&dir)) return;
 
             fire_ball(GF_DOMINATION, dir, spell_power(p_ptr->lev), 0);
         }
@@ -261,7 +261,7 @@ void _pulverise_spell(int cmd, variant *res)
         int rad = p_ptr->lev > 20 ? spell_power((p_ptr->lev - 20) / 8 + 1) : 0;
 
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
 
         fire_ball(
             GF_TELEKINESIS,
@@ -470,7 +470,7 @@ void _psychic_drain_spell(int cmd, variant *res)
         int dir = 0;
         int dam = spell_power(damroll(p_ptr->lev / 2, 6) + p_ptr->to_d_spell);
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
 
         /* Only charge extra energy if the drain succeeded */
         if (fire_ball(GF_PSI_DRAIN, dir, dam, 0))
@@ -502,7 +502,7 @@ void psycho_spear_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         fire_beam(GF_PSY_SPEAR, dir, spell_power(randint1(p_ptr->lev*3)+p_ptr->lev*3 + p_ptr->to_d_spell));
         var_set_bool(res, TRUE);
         break;
@@ -530,7 +530,7 @@ void _psycho_storm_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
 
         fire_ball(GF_PSI_STORM, dir, spell_power(p_ptr->lev * 5 + damroll(10, 10) + p_ptr->to_d_spell), 4);
 
@@ -584,7 +584,7 @@ static int _get_powers(spell_info* spells, int max)
 
 static void _calc_bonuses(void)
 {
-    if (equip_find_artifact(ART_STONE_OF_MIND))
+    if (equip_find_art(ART_STONE_OF_MIND))
     {
         p_ptr->dec_mana = TRUE;
         p_ptr->easy_spell = TRUE;
@@ -654,7 +654,9 @@ static caster_info * _caster_info(void)
     {
         me.magic_desc = "mindcraft";
         me.which_stat = A_WIS;
-        me.weight = 400;
+        me.encumbrance.max_wgt = 400;
+        me.encumbrance.weapon_pct = 50;
+        me.encumbrance.enc_wgt = 800;
         me.on_fail = _on_fail;
         init = TRUE;
     }
@@ -667,6 +669,13 @@ static void _character_dump(doc_ptr doc)
     int        ct = _get_spells(spells, MAX_SPELLS);
 
     py_display_spells(doc, spells, ct);
+}
+
+static void _birth(void)
+{
+    py_birth_obj_aux(TV_SWORD, SV_SMALL_SWORD, 1);
+    py_birth_obj_aux(TV_SOFT_ARMOR, SV_SOFT_LEATHER_ARMOR, 1);
+    py_birth_obj_aux(TV_POTION, SV_POTION_SPEED, rand_range(2, 5));
 }
 
 class_t *mindcrafter_get_class(void)
@@ -705,7 +714,10 @@ class_t *mindcrafter_get_class(void)
         me.base_hp = 4;
         me.exp = 125;
         me.pets = 35;
+        me.flags = CLASS_SENSE1_SLOW | CLASS_SENSE1_WEAK |
+                   CLASS_SENSE2_MED | CLASS_SENSE2_STRONG;
 
+        me.birth = _birth;
         me.calc_bonuses = _calc_bonuses;
         me.get_flags = _get_flags;
         me.caster_info = _caster_info;

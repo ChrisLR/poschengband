@@ -172,7 +172,7 @@ cptr info_weight(int weight)
  */
 int beam_chance(void)
 {
-    if (p_ptr->pclass == CLASS_MAGE || p_ptr->pclass == CLASS_BLOOD_MAGE || p_ptr->pclass == CLASS_NECROMANCER)
+    if (p_ptr->pclass == CLASS_MAGE || p_ptr->pclass == CLASS_BLOOD_MAGE || p_ptr->pclass == CLASS_NECROMANCER || p_ptr->pclass == CLASS_YELLOW_MAGE || p_ptr->pclass == CLASS_GRAY_MAGE)
         return p_ptr->lev;
     if (p_ptr->pclass == CLASS_HIGH_MAGE || p_ptr->pclass == CLASS_SORCERER)
         return p_ptr->lev + 10;
@@ -714,7 +714,7 @@ static void cast_shuffle(void)
     {
         msg_print("It's the Lovers.");
 
-        if (get_aim_dir(&dir))
+        if (get_fire_dir(&dir))
             charm_monster(dir, MIN(p_ptr->lev, 20));
     }
     else if (die < 101)
@@ -806,7 +806,7 @@ bool cast_wrath_of_the_god(int dam, int rad)
     int dir, i;
     int b = 10 + randint1(10);
 
-    if (!get_aim_dir(&dir)) return FALSE;
+    if (!get_fire_dir(&dir)) return FALSE;
 
     /* Use the given direction */
     tx = px + 99 * ddx[dir];
@@ -904,53 +904,28 @@ static bool item_tester_offer(object_type *o_ptr)
  */
 bool cast_summon_greater_demon(void)
 {
+    obj_prompt_t prompt = {0};
     int plev = p_ptr->lev;
-    int item;
-    cptr q, s;
     int summon_lev;
-    object_type *o_ptr;
 
-    item_tester_hook = item_tester_offer;
-    q = "Sacrifice which corpse? ";
-    s = "You have nothing to sacrifice.";
-    if (!get_item(&item, q, s, (USE_INVEN | USE_FLOOR))) return FALSE;
+    prompt.prompt = "Sacrifice which corpse?";
+    prompt.error = "You have nothing to sacrifice.";
+    prompt.filter = item_tester_offer;
+    prompt.where[0] = INV_PACK;
+    prompt.where[1] = INV_FLOOR;
 
-    /* Get the item (in the pack) */
-    if (item >= 0)
-    {
-        o_ptr = &inventory[item];
-    }
+    obj_prompt(&prompt);
+    if (!prompt.obj) return FALSE;
 
-    /* Get the item (on the floor) */
-    else
-    {
-        o_ptr = &o_list[0 - item];
-    }
-
-    summon_lev = plev * 2 / 3 + r_info[o_ptr->pval].level;
+    summon_lev = plev * 2 / 3 + r_info[prompt.obj->pval].level;
 
     if (summon_specific(-1, py, px, summon_lev, SUMMON_HI_DEMON, (PM_ALLOW_GROUP | PM_FORCE_PET)))
     {
         msg_print("The area fills with a stench of sulphur and brimstone.");
-
-
         msg_print("'What is thy bidding... Master?'");
 
-        /* Decrease the item (from the pack) */
-        if (item >= 0)
-        {
-            inven_item_increase(item, -1);
-            inven_item_describe(item);
-            inven_item_optimize(item);
-        }
-
-        /* Decrease the item (from the floor) */
-        else
-        {
-            floor_item_increase(0 - item, -1);
-            floor_item_describe(0 - item);
-            floor_item_optimize(0 - item);
-        }
+        prompt.obj->number--;
+        obj_release(prompt.obj, 0);
     }
     else
     {
@@ -1098,12 +1073,6 @@ static cptr do_life_spell(int spell, int mode)
             if (cast)
             {
                 set_food(PY_FOOD_MAX - 1);
-                if (p_ptr->fasting)
-                {
-                    msg_print("You break your fast.");
-                    p_ptr->redraw |= PR_STATUS;
-                    p_ptr->fasting = FALSE;
-                }
             }
         }
         break;
@@ -1163,7 +1132,7 @@ static cptr do_life_spell(int spell, int mode)
 
     case 11:
         if (name) return "Resist Heat and Cold";
-        if (desc) return "Gives resistance to fire and cold. These resistances can be added to which from equipment for more powerful resistances.";
+        if (desc) return "Gives resistance to fire and cold.";
 
         {
             int base = spell_power(20);
@@ -1284,13 +1253,13 @@ static cptr do_life_spell(int spell, int mode)
         if (spoil) return "Player gains up to L/7 stat sustains for L turns.";
 
         {
-            int dur = spell_power(p_ptr->lev);
+            int dur = spell_power(plev);
 
             if (info) return info_duration(dur, 0);
 
             if (cast)
             {
-                int num = p_ptr->lev / 7;
+                int num = plev / 7;
 
                 if (randint0(7) < num)
                 {
@@ -1339,7 +1308,7 @@ static cptr do_life_spell(int spell, int mode)
 
         if (cast)
         {
-            if (one_in_(100/p_ptr->lev))
+            if (one_in_(100/plev))
                 mut_lose_random(mut_bad_pred);
             else
                 mut_lose_random(NULL);
@@ -1368,7 +1337,7 @@ static cptr do_life_spell(int spell, int mode)
         if (desc) return "For a short while, any damage you receive will be absorbed by your spell points.";
 
         {
-            int dur = spell_power(p_ptr->lev/10);
+            int dur = spell_power(plev/10);
 
             if (info) return format("dur %d", dur);
 
@@ -1568,7 +1537,7 @@ static cptr do_sorcery_spell(int spell, int mode)
             if (cast)
             {
                 if (mut_present(MUT_ASTRAL_GUIDE))
-                    energy_use = 30;
+                    energy_use /= 3;
                 teleport_player(range, 0L);
             }
         }
@@ -1621,7 +1590,7 @@ static cptr do_sorcery_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 confuse_monster(dir, power);
             }
@@ -1640,7 +1609,7 @@ static cptr do_sorcery_spell(int spell, int mode)
             if (cast)
             {
                 if (mut_present(MUT_ASTRAL_GUIDE))
-                    energy_use = 30;
+                    energy_use /= 3;
                 teleport_player(range, 0L);
             }
         }
@@ -1657,7 +1626,7 @@ static cptr do_sorcery_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 sleep_monster(dir, power);
             }
@@ -1666,7 +1635,13 @@ static cptr do_sorcery_spell(int spell, int mode)
 
     case 7:
         if (name) return "Recharging";
-        if (desc) return "It attempts to recharge a device using your mana for power.";
+        if (desc)
+        {
+            if (p_ptr->pclass == CLASS_BLOOD_MAGE)
+                return "It attempts to recharge a device using your blood for power.";
+            else
+                return "It attempts to recharge a device using your mana for power.";
+        }
 
         {
             int power = spell_power(plev * 3);
@@ -1697,13 +1672,19 @@ static cptr do_sorcery_spell(int spell, int mode)
         break;
 
     case 9:
-        if (name) return "Identify";
-        if (desc) return "Identifies an item.";
+        if (name) return plev < 30 ? "Identify" : "Mass Identify";
+        if (desc) return plev < 30 ? "Identifies an item." : "Identifies all items in your pack";
 
         {
             if (cast)
             {
-                if (!ident_spell(NULL)) return NULL;
+                if (plev < 30) 
+                {
+                    if (!ident_spell(NULL))
+                        return NULL;
+                }
+                else
+                    mass_identify(FALSE);
             }
         }
         break;
@@ -1719,7 +1700,7 @@ static cptr do_sorcery_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 slow_monster(dir);
             }
@@ -1764,7 +1745,7 @@ static cptr do_sorcery_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_beam(GF_AWAY_ALL, dir, power);
             }
@@ -1999,7 +1980,7 @@ static cptr do_sorcery_spell(int spell, int mode)
         if (desc) return "For a very short time, your magical devices are more powerful.";
 
         {
-            int base = spell_power(p_ptr->lev/10);
+            int base = spell_power(plev/10);
 
             if (info) return info_duration(base, base);
 
@@ -2100,7 +2081,7 @@ static cptr do_nature_spell(int spell, int mode)
             {
                 project_length = range;
 
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_beam(GF_ELEC, dir, spell_power(damroll(dice, sides) + p_ptr->to_d_spell));
             }
@@ -2186,7 +2167,7 @@ static cptr do_nature_spell(int spell, int mode)
 
     case 6:
         if (name) return "Resist Environment";
-        if (desc) return "Gives resistance to fire, cold and electricity for a while. These resistances can be added to which from equipment for more powerful resistances.";
+        if (desc) return "Gives resistance to fire, cold and electricity for a while.";
 
         {
             int base = spell_power(20);
@@ -2254,7 +2235,7 @@ static cptr do_nature_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_bolt_or_beam(
                     beam_chance() - 10,
                     GF_COLD,
@@ -2298,7 +2279,7 @@ static cptr do_nature_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_bolt_or_beam(
                     beam_chance() - 10,
                     GF_FIRE,
@@ -2321,7 +2302,7 @@ static cptr do_nature_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 msg_print("A line of sunlight appears.");
 
                 project_hook(
@@ -2434,7 +2415,7 @@ static cptr do_nature_spell(int spell, int mode)
 
     case 18:
         if (name) return "Resistance True";
-        if (desc) return "Gives resistance to fire, cold, electricity, acid and poison for a while. These resistances can be added to which from equipment for more powerful resistances.";
+        if (desc) return "Gives resistance to fire, cold, electricity, acid and poison for a while.";
 
         {
             int base = spell_power(20);
@@ -2555,7 +2536,7 @@ static cptr do_nature_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_FIRE, dir, dam, rad);
             }
         }
@@ -2573,7 +2554,7 @@ static cptr do_nature_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball(GF_COLD, dir, dam, rad);
             }
@@ -2592,7 +2573,7 @@ static cptr do_nature_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_ELEC, dir, dam, rad);
                 break;
             }
@@ -2611,7 +2592,7 @@ static cptr do_nature_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_WATER, dir, dam, rad);
             }
         }
@@ -2629,7 +2610,7 @@ static cptr do_nature_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_bolt(
                     GF_ICE,
                     dir,
@@ -2651,7 +2632,7 @@ static cptr do_nature_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_GRAVITY, dir, dam, rad);
             }
         }
@@ -2684,7 +2665,7 @@ static cptr do_nature_spell(int spell, int mode)
 
             case 2: /* Deadly bolt of lightning */
                 msg_print("Your hands crackle with electricity!");
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_bolt(
                     GF_ELEC,
                     dir,
@@ -2738,7 +2719,7 @@ static cptr do_nature_spell(int spell, int mode)
 
             case 6: /* Rock Storm */
                 msg_print("You fire a storm of boulders!");
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 for (i = 0; i < 3; i++)
                     fire_ball(GF_SHARDS, dir, spell_power(70 + plev + p_ptr->to_d_spell), 1);
                 break;
@@ -2778,7 +2759,7 @@ static cptr do_chaos_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_bolt_or_beam(
                     beam_chance() - 10,
@@ -2855,7 +2836,9 @@ static cptr do_chaos_spell(int spell, int mode)
             if (p_ptr->pclass == CLASS_MAGE ||
                 p_ptr->pclass == CLASS_BLOOD_MAGE ||
                 p_ptr->pclass == CLASS_HIGH_MAGE ||
-                p_ptr->pclass == CLASS_SORCERER)
+                p_ptr->pclass == CLASS_SORCERER ||
+                p_ptr->pclass == CLASS_YELLOW_MAGE ||
+                p_ptr->pclass == CLASS_GRAY_MAGE)
                 base = plev + plev / 2;
             else
                 base = plev + plev / 4;
@@ -2865,7 +2848,7 @@ static cptr do_chaos_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball(
                     GF_MISSILE, /* GF_MANA? */
@@ -2889,7 +2872,7 @@ static cptr do_chaos_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_bolt_or_beam(
                     beam_chance(),
@@ -2951,7 +2934,7 @@ static cptr do_chaos_spell(int spell, int mode)
             if (cast)
             {
 
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 cast_wonder(dir);
             }
@@ -2970,7 +2953,7 @@ static cptr do_chaos_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_bolt_or_beam(
                     beam_chance(),
@@ -3013,7 +2996,7 @@ static cptr do_chaos_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_beam(
                     GF_MANA,
@@ -3036,7 +3019,7 @@ static cptr do_chaos_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball(GF_FIRE, dir, dam, rad);
             }
@@ -3054,7 +3037,7 @@ static cptr do_chaos_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_beam(GF_AWAY_ALL, dir, power);
             }
@@ -3071,7 +3054,7 @@ static cptr do_chaos_spell(int spell, int mode)
 
             if (cast)
             {
-                destroy_area(py, px, base + randint1(sides), spell_power(4 * p_ptr->lev));
+                destroy_area(py, px, base + randint1(sides), spell_power(4 * plev));
             }
         }
         break;
@@ -3088,7 +3071,7 @@ static cptr do_chaos_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball(GF_CHAOS, dir, dam, rad);
             }
@@ -3106,7 +3089,7 @@ static cptr do_chaos_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 poly_monster(dir);
             }
@@ -3165,7 +3148,7 @@ static cptr do_chaos_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball(GF_DISINTEGRATE, dir, dam, rad);
             }
@@ -3194,17 +3177,15 @@ static cptr do_chaos_spell(int spell, int mode)
         if (desc) return "Fires a magic rocket.";
 
         {
-            int dam = spell_power(120 + plev * 2 + p_ptr->to_d_spell);
+            int dam = spell_power(50 + plev * 4 + p_ptr->to_d_spell);
             int rad = 2;
 
             if (info) return info_damage(0, 0, dam);
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
-
+                if (!get_fire_dir(&dir)) return NULL;
                 msg_print("You launch a rocket!");
-
                 fire_rocket(GF_ROCKET, dir, dam, rad);
             }
         }
@@ -3265,7 +3246,7 @@ static cptr do_chaos_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_beam(
                     GF_GRAVITY,
@@ -3324,14 +3305,32 @@ static cptr do_chaos_spell(int spell, int mode)
 
     case 28:
         if (name) return "Polymorph Self";
-        if (desc) return "Polymorphs yourself.";
+        if (desc) return "Polymorphs yourself into a new form.";
 
+        if (cast)
         {
-            if (cast)
+            int which;
+            switch (randint1(50))
             {
-                if (!get_check("You will polymorph yourself. Are you sure? ")) return NULL;
-                do_poly_self();
+            case 1: which = one_in_(10) ? MIMIC_DEMON_LORD : MIMIC_DEMON; break;
+            case 2: which = MIMIC_VAMPIRE; break;
+            default:
+                for (;;)
+                {
+                    which = randint0(MAX_RACES);
+                    if ( which != RACE_HUMAN
+                      && which != RACE_DEMIGOD
+                      && which != RACE_DRACONIAN
+                      && which != RACE_ANDROID
+                      && which != RACE_DOPPELGANGER
+                      && p_ptr->prace != which
+                      && !(get_race_aux(which, 0)->flags & RACE_IS_MONSTER) )
+                    {
+                        break;
+                    }
+                }
             }
+            set_mimic(50 + randint1(50), which, FALSE);
         }
         break;
 
@@ -3347,7 +3346,7 @@ static cptr do_chaos_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball(GF_MANA, dir, dam, rad);
             }
@@ -3366,7 +3365,7 @@ static cptr do_chaos_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball(GF_CHAOS, dir, dam, rad);
             }
@@ -3437,7 +3436,7 @@ static cptr do_death_spell(int spell, int mode)
             if (cast)
             {
                 int dam;
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 dam = spell_power(damroll(dice, sides) + p_ptr->to_d_spell);
                 fire_ball(GF_HELL_FIRE, dir, dam, rad);
 
@@ -3487,7 +3486,7 @@ static cptr do_death_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball(GF_POIS, dir, dam, rad);
             }
@@ -3505,7 +3504,7 @@ static cptr do_death_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 sleep_monster(dir, power);
             }
@@ -3514,7 +3513,7 @@ static cptr do_death_spell(int spell, int mode)
 
     case 5:
         if (name) return "Undead Resistance";
-        if (desc) return "Gives resistance to poison and cold. This resistance can be added to which from equipment for more powerful resistance.";
+        if (desc) return "Gives resistance to poison and cold.";
 
         {
             int base = spell_power(20);
@@ -3540,7 +3539,7 @@ static cptr do_death_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fear_monster(dir, power);
                 stun_monster(dir, power);
@@ -3559,7 +3558,7 @@ static cptr do_death_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 control_one_undead(dir, power);
             }
@@ -3579,7 +3578,9 @@ static cptr do_death_spell(int spell, int mode)
             if (p_ptr->pclass == CLASS_MAGE ||
                 p_ptr->pclass == CLASS_BLOOD_MAGE ||
                 p_ptr->pclass == CLASS_HIGH_MAGE ||
-                p_ptr->pclass == CLASS_SORCERER)
+                p_ptr->pclass == CLASS_SORCERER ||
+                p_ptr->pclass == CLASS_YELLOW_MAGE ||
+                p_ptr->pclass == CLASS_GRAY_MAGE)
                 base = plev + plev / 2;
             else
                 base = plev + plev / 4;
@@ -3589,7 +3590,7 @@ static cptr do_death_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball(
                     GF_OLD_DRAIN,
@@ -3613,7 +3614,7 @@ static cptr do_death_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_bolt_or_beam(
                     beam_chance(),
@@ -3653,7 +3654,7 @@ static cptr do_death_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball_hide(GF_GENOCIDE, dir, power, 0);
             }
@@ -3687,7 +3688,7 @@ static cptr do_death_spell(int spell, int mode)
             {
                 int dam = base + damroll(dice, sides);
 
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 if (drain_life(dir, dam))
                 {
@@ -3777,7 +3778,7 @@ static cptr do_death_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 cast_invoke_spirits(dir);
             }
@@ -3796,7 +3797,7 @@ static cptr do_death_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_bolt_or_beam(
                     beam_chance(),
@@ -3853,7 +3854,7 @@ static cptr do_death_spell(int spell, int mode)
             {
                 int i;
 
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 virtue_add(VIRTUE_SACRIFICE, -1);
                 virtue_add(VIRTUE_VITALITY, -1);
@@ -3897,7 +3898,7 @@ static cptr do_death_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball(GF_DARK, dir, dam, rad);
             }
@@ -3911,7 +3912,7 @@ static cptr do_death_spell(int spell, int mode)
         {
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 project_hook(GF_DEATH_RAY, dir, plev * 200, /*  v--- This is mean as it auto kills the player! */
                                 PROJECT_STOP | PROJECT_KILL /*| PROJECT_REFLECTABLE*/);
             }
@@ -4032,7 +4033,7 @@ static cptr do_death_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball(GF_NETHER, dir, dam, rad);
             }
@@ -4094,7 +4095,7 @@ static cptr do_trump_spell(int spell, int mode)
             if (cast)
             {
                 if (mut_present(MUT_ASTRAL_GUIDE))
-                    energy_use = 30;
+                    energy_use /= 3;
                 teleport_player(range, 0L);
             }
         }
@@ -4161,7 +4162,7 @@ static cptr do_trump_spell(int spell, int mode)
             if (cast)
             {
                 if (mut_present(MUT_ASTRAL_GUIDE))
-                    energy_use = 30;
+                    energy_use /= 3;
                 teleport_player(range, 0L);
             }
         }
@@ -4195,7 +4196,7 @@ static cptr do_trump_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_beam(GF_AWAY_ALL, dir, power);
             }
@@ -4314,7 +4315,7 @@ static cptr do_trump_spell(int spell, int mode)
                 bool old_target_pet = target_pet;
                 target_pet = TRUE;
 
-                result = get_aim_dir(&dir);
+                result = get_fire_dir(&dir);
 
                 /* Restore target_pet option */
                 target_pet = old_target_pet;
@@ -4402,7 +4403,7 @@ static cptr do_trump_spell(int spell, int mode)
                 /* HACK -- No range limit */
                 project_length = -1;
 
-                result = get_aim_dir(&dir);
+                result = get_fire_dir(&dir);
 
                 /* Restore range to default */
                 project_length = 0;
@@ -4604,7 +4605,7 @@ static cptr do_trump_spell(int spell, int mode)
                 bool old_target_pet = target_pet;
                 target_pet = TRUE;
 
-                result = get_aim_dir(&dir);
+                result = get_fire_dir(&dir);
 
                 /* Restore target_pet option */
                 target_pet = old_target_pet;
@@ -4750,7 +4751,7 @@ static cptr do_arcane_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_bolt_or_beam(
                     beam_chance() - 10,
@@ -4820,7 +4821,7 @@ static cptr do_arcane_spell(int spell, int mode)
             if (cast)
             {
                 if (mut_present(MUT_ASTRAL_GUIDE))
-                    energy_use = 30;
+                    energy_use /= 3;
                 teleport_player(range, 0L);
             }
         }
@@ -4969,7 +4970,7 @@ static cptr do_arcane_spell(int spell, int mode)
 
     case 14:
         if (name) return "Resist Cold";
-        if (desc) return "Gives resistance to cold. This resistance can be added to which from equipment for more powerful resistance.";
+        if (desc) return "Gives resistance to cold.";
 
         {
             int base = spell_power(20);
@@ -4985,7 +4986,7 @@ static cptr do_arcane_spell(int spell, int mode)
 
     case 15:
         if (name) return "Resist Fire";
-        if (desc) return "Gives resistance to fire. This resistance can be added to which from equipment for more powerful resistance.";
+        if (desc) return "Gives resistance to fire.";
 
         {
             int base = spell_power(20);
@@ -5001,7 +5002,7 @@ static cptr do_arcane_spell(int spell, int mode)
 
     case 16:
         if (name) return "Resist Lightning";
-        if (desc) return "Gives resistance to electricity. This resistance can be added to which from equipment for more powerful resistance.";
+        if (desc) return "Gives resistance to electricity.";
 
         {
             int base = spell_power(20);
@@ -5017,7 +5018,7 @@ static cptr do_arcane_spell(int spell, int mode)
 
     case 17:
         if (name) return "Resist Acid";
-        if (desc) return "Gives resistance to acid. This resistance can be added to which from equipment for more powerful resistance.";
+        if (desc) return "Gives resistance to acid.";
 
         {
             int base = spell_power(20);
@@ -5061,7 +5062,7 @@ static cptr do_arcane_spell(int spell, int mode)
             if (cast)
             {
                 if (mut_present(MUT_ASTRAL_GUIDE))
-                    energy_use = 30;
+                    energy_use /= 3;
                 teleport_player(range, 0L);
             }
         }
@@ -5111,7 +5112,7 @@ static cptr do_arcane_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 msg_print("A line of light appears.");
 
@@ -5150,7 +5151,7 @@ static cptr do_arcane_spell(int spell, int mode)
 
     case 25:
         if (name) return "Resist Poison";
-        if (desc) return "Gives resistance to poison. This resistance can be added to which from equipment for more powerful resistance.";
+        if (desc) return "Gives resistance to poison.";
 
         {
             int base = spell_power(20);
@@ -5188,7 +5189,7 @@ static cptr do_arcane_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_beam(GF_AWAY_ALL, dir, power);
             }
@@ -5197,7 +5198,13 @@ static cptr do_arcane_spell(int spell, int mode)
 
     case 28:
         if (name) return "Recharging";
-        if (desc) return "It attempts to recharge a device using your mana for power.";
+        if (desc)
+        {
+            if (p_ptr->pclass == CLASS_BLOOD_MAGE)
+                return "It attempts to recharge a device using your blood for power.";
+            else
+                return "It attempts to recharge a device using your mana for power.";
+        }
 
         {
             int power = spell_power(plev * 3 / 2);
@@ -5273,6 +5280,87 @@ static cptr do_arcane_spell(int spell, int mode)
     return "";
 }
 
+static bool _can_enchant(obj_ptr obj) {
+    if (object_is_(obj, TV_SWORD, SV_POISON_NEEDLE)) return FALSE;
+    return object_is_weapon_armour_ammo(obj);
+}
+bool craft_enchant(int max, int inc)
+{
+    obj_prompt_t prompt = {0};
+    char         o_name[MAX_NLEN];
+    bool         improved = FALSE;
+    u32b         flgs[OF_ARRAY_SIZE];
+
+    prompt.prompt = "Enchant which item?";
+    prompt.error = "You have nothing to enchant.";
+    prompt.filter = _can_enchant;
+    prompt.where[0] = INV_PACK;
+    prompt.where[1] = INV_EQUIP;
+    prompt.where[2] = INV_QUIVER;
+    prompt.where[3] = INV_FLOOR;
+
+    obj_prompt(&prompt);
+    if (!prompt.obj) return FALSE;
+
+    object_desc(o_name, prompt.obj, (OD_OMIT_PREFIX | OD_NAME_ONLY));
+
+    /* Some objects cannot be enchanted */
+    obj_flags(prompt.obj, flgs);
+    if (have_flag(flgs, OF_NO_ENCHANT))
+        return FALSE;
+
+    /* Enchanting is now automatic ... It was always possible to max
+     * out enchanting quickly with skilled macro usage, but other players
+     * are inviting carpal tunnel issues to no purpose. */
+    if (object_is_weapon_ammo(prompt.obj))
+    {
+        if (prompt.obj->to_h < max)
+        {
+            prompt.obj->to_h = MIN(max, prompt.obj->to_h + inc);
+            if (prompt.obj->to_h >= 0)
+                break_curse(prompt.obj);
+            improved = TRUE;
+        }
+        if (prompt.obj->to_d < max)
+        {
+            prompt.obj->to_d = MIN(max, prompt.obj->to_d + inc);
+            if (prompt.obj->to_d >= 0)
+                break_curse(prompt.obj);
+            improved = TRUE;
+        }
+    }
+    else
+    {
+        if (prompt.obj->to_a < max)
+        {
+            prompt.obj->to_a = MIN(max, prompt.obj->to_a + inc);
+            if (prompt.obj->to_a >= 0)
+                break_curse(prompt.obj);
+            improved = TRUE;
+        }
+    }
+
+
+    msg_format("%s %s glow%s brightly!",
+            (prompt.obj->loc.where != INV_FLOOR) ? "Your" : "The", o_name,
+            (prompt.obj->number > 1) ? "" : "s");
+
+    if (!improved)
+    {
+        msg_print("The enchantment failed.");
+        if (one_in_(3) && virtue_current(VIRTUE_ENCHANTMENT) < 100)
+            virtue_add(VIRTUE_ENCHANTMENT, -1);
+    }
+    else
+    {
+        virtue_add(VIRTUE_ENCHANTMENT, 1);
+        /* Minor Enchantment should not allow gold farming ... */
+        if (inc == 1 && object_is_nameless(prompt.obj))
+            prompt.obj->discount = 99;
+        obj_release(prompt.obj, OBJ_RELEASE_ENCHANT);
+    }
+    return TRUE;
+}
 
 static cptr do_craft_spell(int spell, int mode)
 {
@@ -5291,59 +5379,8 @@ static cptr do_craft_spell(int spell, int mode)
 
         if (cast)
         {
-            int         item;
-            bool        okay = FALSE;
-            object_type *o_ptr;
-            char        o_name[MAX_NLEN];
-
-            item_tester_hook = object_is_weapon_armour_ammo;
-            item_tester_no_ryoute = TRUE;
-
-            if (!get_item(&item, "Enchant which item? ", "You have nothing to enchant.", (USE_EQUIP | USE_INVEN | USE_FLOOR))) return NULL;
-
-            if (item >= 0)
-                o_ptr = &inventory[item];
-            else
-                o_ptr = &o_list[0 - item];
-
-            object_desc(o_name, o_ptr, (OD_OMIT_PREFIX | OD_NAME_ONLY));
-
-            if (object_is_weapon_ammo(o_ptr))
-            {
-                if (one_in_(2))
-                {
-                    if (enchant(o_ptr, 1, ENCH_TOHIT | ENCH_MINOR_HACK)) okay = TRUE;
-                }
-                else
-                {
-                    if (enchant(o_ptr, 1, ENCH_TODAM | ENCH_MINOR_HACK)) okay = TRUE;
-                }
-            }
-            else
-            {
-                if (enchant(o_ptr, 1, ENCH_TOAC | ENCH_MINOR_HACK)) okay = TRUE;
-            }
-
-
-            msg_format("%s %s glow%s brightly!",
-                    ((item >= 0) ? "Your" : "The"), o_name,
-                    ((o_ptr->number > 1) ? "" : "s"));
-
-            if (!okay)
-            {
-                if (flush_failure) flush();
-                msg_print("The enchantment failed.");
-                if (one_in_(3) && virtue_current(VIRTUE_ENCHANTMENT) < 100)
-                    virtue_add(VIRTUE_ENCHANTMENT, -1);
-            }
-            else
-            {
-                if (object_is_nameless(o_ptr))
-                    o_ptr->discount = 99;
-                virtue_add(VIRTUE_ENCHANTMENT, 1);
-            }
-
-            android_calc_exp();
+            if (!craft_enchant(2 + plev/5, 1))
+                return NULL;
         }
         break;
 
@@ -5377,7 +5414,7 @@ static cptr do_craft_spell(int spell, int mode)
 
     case 3:
         if (name) return "Resist Cold";
-        if (desc) return "Gives resistance to cold. This resistance can be added to which from equipment for more powerful resistance.";
+        if (desc) return "Gives resistance to cold.";
 
         {
             int base = spell_power(20);
@@ -5393,7 +5430,7 @@ static cptr do_craft_spell(int spell, int mode)
 
     case 4:
         if (name) return "Resist Fire";
-        if (desc) return "Gives resistance to fire. This resistance can be added to which from equipment for more powerful resistance.";
+        if (desc) return "Gives resistance to fire.";
 
         {
             int base = spell_power(20);
@@ -5425,7 +5462,7 @@ static cptr do_craft_spell(int spell, int mode)
 
     case 6:
         if (name) return "Resist Lightning";
-        if (desc) return "Gives resistance to electricity. This resistance can be added to which from equipment for more powerful resistance.";
+        if (desc) return "Gives resistance to electricity.";
 
         {
             int base = spell_power(20);
@@ -5441,7 +5478,7 @@ static cptr do_craft_spell(int spell, int mode)
 
     case 7:
         if (name) return "Resist Acid";
-        if (desc) return "Gives resistance to acid. This resistance can be added to which from equipment for more powerful resistance.";
+        if (desc) return "Gives resistance to acid.";
 
         {
             int base = spell_power(20);
@@ -5484,7 +5521,7 @@ static cptr do_craft_spell(int spell, int mode)
 
     case 10:
         if (name) return "Resist Poison";
-        if (desc) return "Gives resistance to poison. This resistance can be added to which from equipment for more powerful resistance.";
+        if (desc) return "Gives resistance to poison.";
 
         {
             int base = spell_power(20);
@@ -5606,7 +5643,7 @@ static cptr do_craft_spell(int spell, int mode)
 
     case 18:
         if (name) return "Resistance";
-        if (desc) return "Gives resistance to fire, cold, electricity, acid and poison for a while. These resistances can be added to which from equipment for more powerful resistances.";
+        if (desc) return "Gives resistance to fire, cold, electricity, acid and poison for a while.";
 
         {
             int base = spell_power(20);
@@ -5670,7 +5707,9 @@ static cptr do_craft_spell(int spell, int mode)
         if (name) return "Polish Shield";
         if (desc) return "Makes your shield reflect missiles and bolt spells.";
         if (cast)
-            polish_shield();
+        {
+            if (!polish_shield()) return NULL;
+        }
         break;
 
     case 22:
@@ -5749,11 +5788,10 @@ static cptr do_craft_spell(int spell, int mode)
         if (name) return "Enchantment";
         if (desc) return "Attempts to increase +to-hit, +to-dam of a weapon, or to increase +AC of armor.";
 
+        if (cast)
         {
-            if (cast)
-            {
-                if (!cast_enchantment()) return NULL;
-            }
+            if (!craft_enchant(15, 3))
+                return NULL;
         }
         break;
 
@@ -5848,7 +5886,7 @@ static cptr do_daemon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_bolt_or_beam(
                     beam_chance() - 10,
@@ -5894,7 +5932,7 @@ static cptr do_daemon_spell(int spell, int mode)
 
     case 3:
         if (name) return "Resist Fire";
-        if (desc) return "Gives resistance to fire for a while. This resistance can be added to which from equipment for more powerful resistances.";
+        if (desc) return "Gives resistance to fire for a while.";
 
         {
             int base = spell_power(20);
@@ -5919,7 +5957,7 @@ static cptr do_daemon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fear_monster(dir, power);
                 stun_monster(dir, power);
@@ -5939,7 +5977,7 @@ static cptr do_daemon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_bolt_or_beam(
                     beam_chance(),
@@ -5979,7 +6017,9 @@ static cptr do_daemon_spell(int spell, int mode)
             if (p_ptr->pclass == CLASS_MAGE ||
                 p_ptr->pclass == CLASS_BLOOD_MAGE ||
                 p_ptr->pclass == CLASS_HIGH_MAGE ||
-                p_ptr->pclass == CLASS_SORCERER)
+                p_ptr->pclass == CLASS_SORCERER ||
+                p_ptr->pclass == CLASS_YELLOW_MAGE ||
+                p_ptr->pclass == CLASS_GRAY_MAGE)
                 base = plev + plev / 2;
             else
                 base = plev + plev / 4;
@@ -5989,7 +6029,7 @@ static cptr do_daemon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball(
                     GF_HELL_FIRE,
@@ -6012,7 +6052,7 @@ static cptr do_daemon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 control_one_demon(dir, power);
             }
@@ -6063,7 +6103,7 @@ static cptr do_daemon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_bolt_or_beam(
                     beam_chance(),
@@ -6087,7 +6127,7 @@ static cptr do_daemon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball(GF_FIRE, dir, dam, rad);
             }
@@ -6118,7 +6158,7 @@ static cptr do_daemon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball(GF_NETHER, dir, dam, rad);
             }
@@ -6181,7 +6221,7 @@ static cptr do_daemon_spell(int spell, int mode)
 
     case 17:
         if (name) return "Devilish Cloak";
-        if (desc) return "Gives resistance to fire, acid and poison as well as an aura of fire. These resistances can be added to which from equipment for more powerful resistances.";
+        if (desc) return "Gives resistance to fire, acid and poison as well as an aura of fire.";
 
         {
             int base = spell_power(20);
@@ -6231,7 +6271,7 @@ static cptr do_daemon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball(GF_PLASMA, dir, dam, rad);
             }
@@ -6274,14 +6314,14 @@ static cptr do_daemon_spell(int spell, int mode)
         if (desc) return "Fires a ball of nexus.";
 
         {
-            int dam = spell_power(100 + plev * 2 + p_ptr->to_d_spell);
+            int dam = spell_power(75 + plev * 3 + p_ptr->to_d_spell);
             int rad = 4;
 
             if (info) return info_damage(0, 0, dam);
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_NEXUS, dir, dam, rad);
             }
         }
@@ -6294,7 +6334,7 @@ static cptr do_daemon_spell(int spell, int mode)
         {
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 else msg_print("You invoke the Hand of Doom!");
 
                 fire_ball_hide(GF_HAND_DOOM, dir, spell_power(plev * 3), 0);
@@ -6390,7 +6430,7 @@ static cptr do_daemon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball(GF_HELL_FIRE, dir, dam, rad);
                 take_hit(DAMAGE_USELIFE, 20 + randint1(30), "the strain of casting Hellfire", -1);
@@ -6409,7 +6449,7 @@ static cptr do_daemon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball_hide(GF_GENOCIDE, dir, power, 0);
             }
@@ -6461,7 +6501,7 @@ static cptr do_crusade_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_bolt_or_beam(
                     beam_chance() - 10,
@@ -6508,7 +6548,7 @@ static cptr do_crusade_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fear_monster(dir, power);
             }
@@ -6543,7 +6583,7 @@ static cptr do_crusade_spell(int spell, int mode)
             if (cast)
             {
                 if (mut_present(MUT_ASTRAL_GUIDE))
-                    energy_use = 30;
+                    energy_use /= 3;
                 teleport_player(range, 0L);
             }
         }
@@ -6561,7 +6601,7 @@ static cptr do_crusade_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_blast(GF_LITE, dir, dice, sides, 10, 3);
             }
         }
@@ -6592,7 +6632,7 @@ static cptr do_crusade_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_AWAY_EVIL, dir, power, 0);
             }
         }
@@ -6619,7 +6659,7 @@ static cptr do_crusade_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(
                     GF_HOLY_FIRE,
                     dir,
@@ -6708,7 +6748,7 @@ static cptr do_crusade_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_bolt(GF_ELEC, dir, dam);
             }
         }
@@ -6761,7 +6801,7 @@ static cptr do_crusade_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 stasis_evil(dir);
             }
         }
@@ -6845,7 +6885,7 @@ static cptr do_crusade_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball(GF_LITE, dir, dam, rad);
             }
@@ -6943,7 +6983,7 @@ static cptr do_crusade_spell(int spell, int mode)
 
             if (cast)
             {
-                destroy_area(py, px, base + randint1(sides), spell_power(4 * p_ptr->lev));
+                destroy_area(py, px, base + randint1(sides), spell_power(4 * plev));
             }
         }
         break;
@@ -7097,7 +7137,7 @@ static cptr do_music_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_bolt(
                     GF_SOUND,
@@ -7508,7 +7548,7 @@ static cptr do_music_spell(int spell, int mode)
 
     case 17:
         if (name) return "Finrod's Resistance";
-        if (desc) return "Gives resistance to fire, cold, electricity, acid and poison. These resistances can be added to which from equipment for more powerful resistances.";
+        if (desc) return "Gives resistance to fire, cold, electricity, acid and poison.";
 
         /* Stop singing before start another */
         if (cast || fail) bard_stop_singing();
@@ -7663,7 +7703,7 @@ static cptr do_music_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_beam(
                     GF_SOUND,
@@ -7879,7 +7919,7 @@ static cptr do_music_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
 
                 fire_ball(
                     GF_SOUND,
@@ -7955,11 +7995,6 @@ static bool item_tester_hook_weapon_except_bow(object_type *o_ptr)
     return (FALSE);
 }
 
-static bool item_tester_hook_cursed(object_type *o_ptr)
-{
-    return (bool)(object_is_cursed(o_ptr));
-}
-
 static cptr do_hex_spell(int spell, int mode)
 {
     bool name = (mode == SPELL_NAME) ? TRUE : FALSE;
@@ -8027,7 +8062,7 @@ static cptr do_hex_spell(int spell, int mode)
     case 3:
         if (name) return "Stinking mist";
         if (desc) return "Deals few damages of poison to all monsters in your sight.";
-        power = plev / 2 + 5;
+        power = plev / 2 + 5 + p_ptr->to_d_spell;
         if (info) return info_damage(1, power, 0);
         if (cast || cont)
         {
@@ -8049,44 +8084,43 @@ static cptr do_hex_spell(int spell, int mode)
         if (desc) return "Curses your weapon.";
         if (cast)
         {
-            int item;
-            char *q, *s;
+            obj_prompt_t prompt = {0};
             char o_name[MAX_NLEN];
-            object_type *o_ptr;
             u32b f[OF_ARRAY_SIZE];
 
-            item_tester_hook = item_tester_hook_weapon_except_bow;
-            q = "Which weapon do you curse?";
-            s = "You wield no weapons.";
+            prompt.prompt = "Which weapon do you curse?";
+            prompt.error = "You wield no weapons.";
+            prompt.filter = item_tester_hook_weapon_except_bow;
+            prompt.where[0] = INV_EQUIP;
 
-            if (!get_item(&item, q, s, (USE_EQUIP))) return FALSE;
+            obj_prompt(&prompt);
+            if (!prompt.obj) return FALSE;
 
-            o_ptr = &inventory[item];
-            object_desc(o_name, o_ptr, OD_NAME_ONLY);
-            obj_flags(o_ptr, f);
+            object_desc(o_name, prompt.obj, OD_NAME_ONLY);
+            obj_flags(prompt.obj, f);
 
             if (!get_check(format("Do you curse %s, really?", o_name))) return FALSE;
 
             if (!one_in_(3) &&
-                (object_is_artifact(o_ptr) || have_flag(f, OF_BLESSED)))
+                (object_is_artifact(prompt.obj) || have_flag(f, OF_BLESSED)))
             {
                 msg_format("%s resists the effect.", o_name);
                 if (one_in_(3))
                 {
-                    if (o_ptr->to_d > 0)
+                    if (prompt.obj->to_d > 0)
                     {
-                        o_ptr->to_d -= randint1(3) % 2;
-                        if (o_ptr->to_d < 0) o_ptr->to_d = 0;
+                        prompt.obj->to_d -= randint1(3) % 2;
+                        if (prompt.obj->to_d < 0) prompt.obj->to_d = 0;
                     }
-                    if (o_ptr->to_h > 0)
+                    if (prompt.obj->to_h > 0)
                     {
-                        o_ptr->to_h -= randint1(3) % 2;
-                        if (o_ptr->to_h < 0) o_ptr->to_h = 0;
+                        prompt.obj->to_h -= randint1(3) % 2;
+                        if (prompt.obj->to_h < 0) prompt.obj->to_h = 0;
                     }
-                    if (o_ptr->to_a > 0)
+                    if (prompt.obj->to_a > 0)
                     {
-                        o_ptr->to_a -= randint1(3) % 2;
-                        if (o_ptr->to_a < 0) o_ptr->to_a = 0;
+                        prompt.obj->to_a -= randint1(3) % 2;
+                        if (prompt.obj->to_a < 0) prompt.obj->to_a = 0;
                     }
                     msg_format("Your %s was disenchanted!", o_name);
                 }
@@ -8095,26 +8129,26 @@ static cptr do_hex_spell(int spell, int mode)
             {
                 int power = 0;
                 msg_format("A terrible black aura blasts your %s!", o_name);
-                o_ptr->curse_flags |= (OFC_CURSED);
+                prompt.obj->curse_flags |= (OFC_CURSED);
 
-                if (object_is_artifact(o_ptr) || object_is_ego(o_ptr))
+                if (object_is_artifact(prompt.obj) || object_is_ego(prompt.obj))
                 {
 
-                    if (one_in_(3)) o_ptr->curse_flags |= (OFC_HEAVY_CURSE);
+                    if (one_in_(3)) prompt.obj->curse_flags |= (OFC_HEAVY_CURSE);
                     if (one_in_(666))
                     {
-                        o_ptr->curse_flags |= (OFC_TY_CURSE);
-                        if (one_in_(666)) o_ptr->curse_flags |= (OFC_PERMA_CURSE);
+                        prompt.obj->curse_flags |= (OFC_TY_CURSE);
+                        if (one_in_(666)) prompt.obj->curse_flags |= (OFC_PERMA_CURSE);
 
-                        add_flag(o_ptr->flags, OF_AGGRAVATE);
-                        add_flag(o_ptr->flags, OF_VORPAL);
-                        add_flag(o_ptr->flags, OF_BRAND_VAMP);
+                        add_flag(prompt.obj->flags, OF_AGGRAVATE);
+                        add_flag(prompt.obj->flags, OF_VORPAL);
+                        add_flag(prompt.obj->flags, OF_BRAND_VAMP);
                         msg_print("Blood, Blood, Blood!");
                         power = 2;
                     }
                 }
 
-                o_ptr->curse_flags |= get_curse(power, o_ptr);
+                prompt.obj->curse_flags |= get_curse(power, prompt.obj);
             }
 
             p_ptr->update |= (PU_BONUS);
@@ -8135,7 +8169,7 @@ static cptr do_hex_spell(int spell, int mode)
     case 7:
         if (name) return "Patience";
         if (desc) return "Bursts hell fire strongly after patients any damage while few turns.";
-        power = MIN(200, (p_ptr->magic_num1[2] * 2));
+        power = MIN(200, p_ptr->magic_num1[2] * 2 + p_ptr->to_d_spell);
         if (info) return info_damage(0, 0, power);
         if (cast)
         {
@@ -8162,7 +8196,7 @@ static cptr do_hex_spell(int spell, int mode)
 
             if ((p_ptr->magic_num2[2] <= 0) || (power >= 200))
             {
-                msg_print("Time for end of patioence!");
+                msg_print("Time for end of patience!");
                 if (power)
                 {
                     project(0, rad, py, px, power, GF_HELL_FIRE,
@@ -8225,7 +8259,7 @@ static cptr do_hex_spell(int spell, int mode)
     case 11:
         if (name) return "Vampiric mist";
         if (desc) return "Deals few damages of drain life to all monsters in your sight.";
-        power = (plev / 2) + 5;
+        power = (plev / 2) + 5 + p_ptr->to_d_spell;
         if (info) return info_damage(1, power, 0);
         if (cast || cont)
         {
@@ -8313,7 +8347,14 @@ static cptr do_hex_spell(int spell, int mode)
 
     case 18:
         if (name) return "Recharging";
-        if (desc) return "It attempts to recharge a device using your mana for power.";
+        if (desc)
+        {
+            if (p_ptr->pclass == CLASS_BLOOD_MAGE)
+                return "It attempts to recharge a device using your blood for power.";
+            else
+                return "It attempts to recharge a device using your mana for power.";
+        }
+
         power = plev * 2;
         if (info) return info_power(power);
         if (cast)
@@ -8341,44 +8382,43 @@ static cptr do_hex_spell(int spell, int mode)
         if (desc) return "Curse a piece of armour that you wielding.";
         if (cast)
         {
-            int item;
-            char *q, *s;
+            obj_prompt_t prompt = {0};
             char o_name[MAX_NLEN];
-            object_type *o_ptr;
             u32b f[OF_ARRAY_SIZE];
 
-            item_tester_hook = object_is_armour;
-            q = "Which piece of armour do you curse?";
-            s = "You wield no piece of armours.";
+            prompt.prompt = "Which piece of armour do you curse?";
+            prompt.error = "You wield no piece of armours.";
+            prompt.filter = object_is_armour;
+            prompt.where[0] = INV_EQUIP;
 
-            if (!get_item(&item, q, s, (USE_EQUIP))) return FALSE;
+            obj_prompt(&prompt);
+            if (!prompt.obj) return FALSE;
 
-            o_ptr = &inventory[item];
-            object_desc(o_name, o_ptr, OD_NAME_ONLY);
-            obj_flags(o_ptr, f);
+            object_desc(o_name, prompt.obj, OD_NAME_ONLY);
+            obj_flags(prompt.obj, f);
 
             if (!get_check(format("Do you curse %s, really?", o_name))) return FALSE;
 
             if (!one_in_(3) &&
-                (object_is_artifact(o_ptr) || have_flag(f, OF_BLESSED)))
+                (object_is_artifact(prompt.obj) || have_flag(f, OF_BLESSED)))
             {
                 msg_format("%s resists the effect.", o_name);
                 if (one_in_(3))
                 {
-                    if (o_ptr->to_d > 0)
+                    if (prompt.obj->to_d > 0)
                     {
-                        o_ptr->to_d -= randint1(3) % 2;
-                        if (o_ptr->to_d < 0) o_ptr->to_d = 0;
+                        prompt.obj->to_d -= randint1(3) % 2;
+                        if (prompt.obj->to_d < 0) prompt.obj->to_d = 0;
                     }
-                    if (o_ptr->to_h > 0)
+                    if (prompt.obj->to_h > 0)
                     {
-                        o_ptr->to_h -= randint1(3) % 2;
-                        if (o_ptr->to_h < 0) o_ptr->to_h = 0;
+                        prompt.obj->to_h -= randint1(3) % 2;
+                        if (prompt.obj->to_h < 0) prompt.obj->to_h = 0;
                     }
-                    if (o_ptr->to_a > 0)
+                    if (prompt.obj->to_a > 0)
                     {
-                        o_ptr->to_a -= randint1(3) % 2;
-                        if (o_ptr->to_a < 0) o_ptr->to_a = 0;
+                        prompt.obj->to_a -= randint1(3) % 2;
+                        if (prompt.obj->to_a < 0) prompt.obj->to_a = 0;
                     }
                     msg_format("Your %s was disenchanted!", o_name);
                 }
@@ -8387,27 +8427,27 @@ static cptr do_hex_spell(int spell, int mode)
             {
                 int power = 0;
                 msg_format("A terrible black aura blasts your %s!", o_name);
-                o_ptr->curse_flags |= (OFC_CURSED);
+                prompt.obj->curse_flags |= (OFC_CURSED);
 
-                if (object_is_artifact(o_ptr) || object_is_ego(o_ptr))
+                if (object_is_artifact(prompt.obj) || object_is_ego(prompt.obj))
                 {
 
-                    if (one_in_(3)) o_ptr->curse_flags |= (OFC_HEAVY_CURSE);
+                    if (one_in_(3)) prompt.obj->curse_flags |= (OFC_HEAVY_CURSE);
                     if (one_in_(666))
                     {
-                        o_ptr->curse_flags |= (OFC_TY_CURSE);
-                        if (one_in_(666)) o_ptr->curse_flags |= (OFC_PERMA_CURSE);
+                        prompt.obj->curse_flags |= (OFC_TY_CURSE);
+                        if (one_in_(666)) prompt.obj->curse_flags |= (OFC_PERMA_CURSE);
 
-                        add_flag(o_ptr->flags, OF_AGGRAVATE);
-                        add_flag(o_ptr->flags, OF_RES_POIS);
-                        add_flag(o_ptr->flags, OF_RES_DARK);
-                        add_flag(o_ptr->flags, OF_RES_NETHER);
+                        add_flag(prompt.obj->flags, OF_AGGRAVATE);
+                        add_flag(prompt.obj->flags, OF_RES_POIS);
+                        add_flag(prompt.obj->flags, OF_RES_DARK);
+                        add_flag(prompt.obj->flags, OF_RES_NETHER);
                         msg_print("Blood, Blood, Blood!");
                         power = 2;
                     }
                 }
 
-                o_ptr->curse_flags |= get_curse(power, o_ptr);
+                prompt.obj->curse_flags |= get_curse(power, prompt.obj);
             }
 
             p_ptr->update |= (PU_BONUS);
@@ -8459,7 +8499,7 @@ static cptr do_hex_spell(int spell, int mode)
     case 22:
         if (name) return "Pains to mana";
         if (desc) return "Deals psychic damages to all monsters in sight, and drains some mana.";
-        power = plev * 3 / 2;
+        power = plev * 3 / 2 + p_ptr->to_d_spell;
         if (info) return info_damage(1, power, 0);
         if (cast || cont)
         {
@@ -8536,7 +8576,7 @@ static cptr do_hex_spell(int spell, int mode)
                 msg_format("Finish casting '%^s'.", do_spell(REALM_HEX, HEX_RESTORE, SPELL_NAME));
                 p_ptr->magic_num1[0] &= ~(1L << HEX_RESTORE);
                 if (cont) p_ptr->magic_num2[0]--;
-                if (p_ptr->magic_num2) p_ptr->action = ACTION_NONE;
+                if (!p_ptr->magic_num2[0]) set_action(ACTION_NONE);
 
                 /* Redraw status */
                 p_ptr->update |= (PU_BONUS | PU_HP | PU_MANA | PU_SPELLS);
@@ -8552,40 +8592,39 @@ static cptr do_hex_spell(int spell, int mode)
         if (desc) return "Drains curse on your weapon and heals SP a little.";
         if (cast)
         {
-            int item;
-            char *s, *q;
+            obj_prompt_t prompt = {0};
             u32b f[OF_ARRAY_SIZE];
-            object_type *o_ptr;
 
-            item_tester_hook = item_tester_hook_cursed;
-            q = "Which cursed equipment do you drain mana from?";
-            s = "You have no cursed equipment.";
+            prompt.prompt = "Which cursed equipment do you drain mana from?";
+            prompt.error = "You have no cursed equipment.";
+            prompt.filter = object_is_cursed;
+            prompt.where[0] = INV_EQUIP;
 
-            if (!get_item(&item, q, s, (USE_EQUIP))) return FALSE;
+            obj_prompt(&prompt);
+            if (!prompt.obj) return FALSE;
 
-            o_ptr = &inventory[item];
-            obj_flags(o_ptr, f);
+            obj_flags(prompt.obj, f);
 
-            p_ptr->csp += (p_ptr->lev / 5) + randint1(p_ptr->lev / 5);
-            if (have_flag(f, OF_TY_CURSE) || (o_ptr->curse_flags & OFC_TY_CURSE)) p_ptr->csp += randint1(5);
+            p_ptr->csp += (plev / 5) + randint1(plev / 5);
+            if (have_flag(f, OF_TY_CURSE) || (prompt.obj->curse_flags & OFC_TY_CURSE)) p_ptr->csp += randint1(5);
             if (p_ptr->csp > p_ptr->msp) p_ptr->csp = p_ptr->msp;
 
-            if (o_ptr->curse_flags & OFC_PERMA_CURSE)
+            if (prompt.obj->curse_flags & OFC_PERMA_CURSE)
             {
                 /* Nothing */
             }
-            else if (o_ptr->curse_flags & OFC_HEAVY_CURSE)
+            else if (prompt.obj->curse_flags & OFC_HEAVY_CURSE)
             {
                 if (one_in_(7))
                 {
                     msg_print("Heavy curse vanished away.");
-                    o_ptr->curse_flags = 0L;
+                    prompt.obj->curse_flags = 0L;
                 }
             }
-            else if ((o_ptr->curse_flags & (OFC_CURSED)) && one_in_(3))
+            else if ((prompt.obj->curse_flags & (OFC_CURSED)) && one_in_(3))
             {
                 msg_print("Curse vanished away.");
-                o_ptr->curse_flags = 0L;
+                prompt.obj->curse_flags = 0L;
             }
 
             add = FALSE;
@@ -8656,7 +8695,7 @@ static cptr do_hex_spell(int spell, int mode)
             {
                 msg_print("Oops!");
                 if (mut_present(MUT_ASTRAL_GUIDE))
-                    energy_use = 30;
+                    energy_use /= 3;
                 teleport_player(30, 0L);
             }
 
@@ -8678,7 +8717,7 @@ static cptr do_hex_spell(int spell, int mode)
     case 31:
         if (name) return "Revenge sentence";
         if (desc) return "Fires  a ball of hell fire to try revenging after few turns.";
-        power = p_ptr->magic_num1[2];
+        power = p_ptr->magic_num1[2] + p_ptr->to_d_spell;
         if (info) return info_damage(0, 0, power);
         if (cast)
         {
@@ -8713,7 +8752,7 @@ static cptr do_hex_spell(int spell, int mode)
                     {
                         msg_print("Time to revenge!");
                     }
-                    while (!get_aim_dir(&dir));
+                    while (!get_fire_dir(&dir));
 
                     fire_ball(GF_HELL_FIRE, dir, power, 1);
 
@@ -8724,7 +8763,7 @@ static cptr do_hex_spell(int spell, int mode)
                 }
                 else
                 {
-                    msg_print("You are not a mood to revenge.");
+                    msg_print("You are not in a mood for revenge.");
                 }
                 p_ptr->magic_num1[2] = 0;
             }
@@ -8777,7 +8816,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_bolt_or_beam(
                     beam_chance(),
                     GF_ELEC,
@@ -8799,7 +8838,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_bolt_or_beam(
                     beam_chance(),
                     GF_COLD,
@@ -8821,7 +8860,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_bolt_or_beam(
                     beam_chance(),
                     GF_FIRE,
@@ -8843,7 +8882,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_bolt_or_beam(
                     beam_chance(),
                     GF_ACID,
@@ -8865,7 +8904,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_ELEC, dir, dam, rad);
             }
         }
@@ -8882,7 +8921,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_COLD, dir, dam, rad);
             }
         }
@@ -8899,7 +8938,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_FIRE, dir, dam, rad);
             }
         }
@@ -8916,7 +8955,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_ACID, dir, dam, rad);
             }
         }
@@ -8935,7 +8974,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_bolt_or_beam(
                     beam_chance(),
                     GF_SHARDS,
@@ -8957,7 +8996,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_bolt_or_beam(
                     beam_chance(),
                     GF_GRAVITY,
@@ -8979,7 +9018,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_bolt_or_beam(
                     beam_chance(),
                     GF_PLASMA,
@@ -9001,7 +9040,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_METEOR, dir, dam, rad);
             }
         }
@@ -9036,7 +9075,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_TELEKINESIS, dir, dam, rad);
             }
         }
@@ -9067,7 +9106,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 msg_print("You launch a rocket!");
                 fire_rocket(GF_ROCKET, dir, dam, rad);
             }
@@ -9087,7 +9126,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_bolt(
                     GF_ICE,
                     dir,
@@ -9108,7 +9147,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_WATER, dir, dam, rad);
             }
         }
@@ -9125,7 +9164,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_ELEC, dir, dam, rad);
             }
         }
@@ -9142,7 +9181,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_COLD, dir, dam, rad);
             }
         }
@@ -9159,7 +9198,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_FIRE, dir, dam, rad);
             }
         }
@@ -9176,7 +9215,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_ACID, dir, dam, rad);
             }
         }
@@ -9193,7 +9232,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_PLASMA, dir, dam, rad);
             }
         }
@@ -9210,7 +9249,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_GRAVITY, dir, dam, rad);
             }
         }
@@ -9229,7 +9268,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_bolt(
                     GF_MANA,
                     dir,
@@ -9250,7 +9289,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_PLASMA, dir, dam, rad);
             }
         }
@@ -9267,7 +9306,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_MANA, dir, dam, rad);
             }
         }
@@ -9284,7 +9323,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_SOUND, dir, dam, rad);
             }
         }
@@ -9301,7 +9340,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_INERT, dir, dam, rad);
             }
         }
@@ -9318,7 +9357,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir_aux(&dir, TARGET_DISI)) return NULL;
                 fire_ball(GF_DISINTEGRATE, dir, dam, rad);
             }
         }
@@ -9335,7 +9374,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_MANA, dir, dam, rad);
             }
         }
@@ -9352,7 +9391,7 @@ static cptr do_armageddon_spell(int spell, int mode)
 
             if (cast)
             {
-                if (!get_aim_dir(&dir)) return NULL;
+                if (!get_fire_dir(&dir)) return NULL;
                 fire_ball(GF_SHARDS, dir, dam, rad);
             }
         }

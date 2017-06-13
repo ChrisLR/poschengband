@@ -124,15 +124,6 @@ char *XSetIMValues(XIM, ...); /* Hack for XFree86 4.0 */
  */
 #include "maid-x11.c"
 
-/* gcc warns that this is implicitly declared:
-main-x11.c:2747:3: warning: implicit declaration of function ‘usleep’ [-Wimplicit-function-declaration]
-   case TERM_XTRA_DELAY: usleep(1000 * v); return (0);
-   ^
-   Anybody know how to remove the warning? #include <stdlib.h> does not work ... On my system, this
-   is defined in /usr/include/unistd.h but even #including this directly is not enough to satisfy gcc.
-*/
-extern int usleep(__useconds_t);
-
 /*
  * Hack -- avoid some compiler warnings
  */
@@ -2945,9 +2936,7 @@ static errr Term_pict_x11(int x, int y, int n, const byte *ap, const char *cp, c
 				for (l = 0; l < td->fnt->hgt; l++)
 				{
 					/* If mask set... */
-					/* Hack: I'm turning off the "blending" as it makes many tiles 
-					   unrecognizable in various situations */
-					if ((pixel = XGetPixel(td->tiles, x1 + k, y1 + l)) == blank && FALSE)
+					if ((pixel = XGetPixel(td->tiles, x1 + k, y1 + l)) == blank)
 					{
 						/* Output from the terrain */
 						pixel = XGetPixel(td->tiles, x2 + k, y2 + l);
@@ -3260,10 +3249,10 @@ static errr term_data_init(term_data *td, int i)
 	/* Main window has a differing minimum size */
 	if (i == 0)
 	{
-        /* Main window min size is 80x27 */
+        /* Main window min size is 80x24 */
         td->sizeh->flags = PMinSize | PMaxSize;
         td->sizeh->min_width = 80 * td->fnt->wid + (ox + ox);
-        td->sizeh->min_height = 27 * td->fnt->hgt + (oy + oy);
+        td->sizeh->min_height = 24 * td->fnt->hgt + (oy + oy);
         td->sizeh->max_width = 255 * td->fnt->wid + (ox + ox);
         td->sizeh->max_height = 255 * td->fnt->hgt + (oy + oy);
 	}

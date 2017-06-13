@@ -109,23 +109,6 @@ off after the creation is finished!
   before it is completely explored as any fixed artifact can be 
   regenerated in subsequent levels.
   
-<a name="autoroller"></a>  </font><font color="#ffcc80">Allow use of autoroller for stats </font><font color="#8a8a8a">(autoroller)
-  </font><font color="#ffffff">If you choose to use the auto-roller, you can specify minimum limit 
-  of each stat. Once you have specified your desired statistics, the 
-  computer will then randomly roll successive start-up characters and 
-  compare them to your specified criteria. Each stat is rolled as a 
-  number from 8 to 17, with a normal distribution, and is then 
-  immediately modified based upon the race and class which you have 
-  chosen. Once a character that matches or exceeds your expectations 
-  has been rolled, the computer will display the character for you to 
-  look at, and asks you whether you accept or not. You may press Enter 
-  to accept. If you do not accept, you may press 'r' to resume rolling 
-  and searching for the next match or, if this is not your first match, 
-  'p' to return to the previous character which met your criteria.
-  
-<a name="powerup_home"></a>  </font><font color="#ffcc80">Increase capacity of your home </font><font color="#8a8a8a">(powerup_home)
-  </font><font color="#ffffff">If this option is enabled, the capacity of your home will be expanded 
-  to 20 pages. If not, capacity is only 2 pages.
   
 <a name="Input"></a></font><font color="#c00000">Input Options
   
@@ -138,10 +121,6 @@ off after the creation is finished!
   up. Otherwise, you must use the </font><font color="#ff9200">g </font><font color="#ffffff">command, or the </font><font color="#ff9200">- </font><font color="#ffffff">command while 
   walking. Combined with </font><font color="#ff4040">carry_query_flag</font><font color="#ffffff">, allows you to selectively 
   pick up all items which you step on.
-  
-<a name="carry_query_flag"></a>  </font><font color="#ffcc80">Prompt before picking things up </font><font color="#8a8a8a">(carry_query_flag)
-  </font><font color="#ffffff">Forces the game to ask you if you want to pick something up when you 
-  do something that would normally cause the item to be picked up.
   
 <a name="quick_messages"></a>  </font><font color="#ffcc80">Activate quick messages </font><font color="#8a8a8a">(quick_messages)
   </font><font color="#ffffff">Allows the use of any keypress as a response to the </font><font color="#00c8ff">-more- </font><font color="#ffffff">prompt 
@@ -165,14 +144,24 @@ off after the creation is finished!
             |   Command pets(p)         Search mode ON/OFF(S/#)  |
             +----------------------------------------------------+
   
-<a name="other_query_flag"></a>  </font><font color="#ffcc80">Prompt for floor item selection </font><font color="#8a8a8a">(other_query_flag)
-  </font><font color="#ffffff">Forces the game to ask you before select an item on floor.
   
 <a name="use_old_target"></a>  </font><font color="#ffcc80">Use old target by default </font><font color="#8a8a8a">(use_old_target)
-  </font><font color="#ffffff">Forces all commands which normally ask for a </font><font color="#ff4040">direction </font><font color="#ffffff">to use the 
-  current </font><font color="#ff4040">target </font><font color="#ffffff">if there is one. Use of this option can be dangerous 
-  if you target locations on the ground, unless you clear them when 
-  done.
+  </font><font color="#ffffff">This option forces all commands which normally ask for a </font><font color="#ff4040">direction </font><font color="#ffffff">to 
+  use the current </font><font color="#ff4040">target </font><font color="#ffffff">if there is one. Use of this option can be 
+  dangerous if you target locations on the ground, unless you clear 
+  them when done. Actually, position targets now automatically clear 
+  when they are no longer valid (e.g. after a teleport). Pay attention 
+  to the character info section of your screen as it always shows your 
+  current target, whether monster or location.
+  
+<a name="auto_target"></a>  </font><font color="#ffcc80">Automatically target nearest monster </font><font color="#8a8a8a">(auto_target)
+  </font><font color="#ffffff">With this option enabled, every offensive spell you cast or device 
+  you use will automatically target the closest monster if there is not 
+  already a valid target selected. If you use this option, then it is 
+  highly recommended that you also enable the </font><font color="#ff4040">use_old_target </font><font color="#ffffff">option. 
+  That way, if you are in a situation where the automatic targeting is 
+  not what you want, you can just select a target up front before 
+  casting your spell.
   
 <a name="always_repeat"></a>  </font><font color="#ffcc80">Repeat obvious commands </font><font color="#8a8a8a">(always_repeat)
   </font><font color="#ffffff">Tells the game that when you attempt to </font><font color="#ff4040">open </font><font color="#ffffff">a door or chest, </font><font color="#ff4040">bash </font><font color="#ffffff">a 
@@ -213,23 +202,48 @@ off after the creation is finished!
   into it! Also the disarm command will automatically select one 
   direction if only one known trap is near you.
   
+<a name="auto_get_ammo"></a>  </font><font color="#ffcc80">Automatically get nearby ammo </font><font color="#8a8a8a">(auto_get_ammo)
+  </font><font color="#ffffff">This option instructs the Auto-Get Objects command (</font><font color="#ff9200">^G</font><font color="#ffffff">) to 
+  automatically travel to nearby, visible ammo which is inscribed with 
+  </font><font color="#ff9200">=g </font><font color="#ffffff">(i.e., ammo which you have instructed the autopicker to 
+  automatically pickup). This enhancement is useful for archer builds 
+  after all nearby monsters have been slain. You might consider using 
+  the stronger </font><font color="#ff4040">auto_get_objects </font><font color="#ffffff">option instead.
+  
+<a name="auto_get_objects"></a>  </font><font color="#ffcc80">Automatically get nearby objects </font><font color="#8a8a8a">(auto_get_objects)
+  </font><font color="#ffffff">This option instructs the Auto-Get Objects command (</font><font color="#ff9200">^G</font><font color="#ffffff">) to 
+  automatically travel to nearby visible objects which you have 
+  registered to either pickup or destroy. This option subsumes (and 
+  extends) the </font><font color="#ff4040">auto_get_ammo </font><font color="#ffffff">option since ammo inscribed with </font><font color="#ff9200">=g </font><font color="#ffffff">is 
+  certainly registered for auto-pickup.
+  
 <a name="easy_floor"></a>  </font><font color="#ffcc80">Display floor stacks in a list </font><font color="#8a8a8a">(easy_floor)
   </font><font color="#ffffff">Lets you select an item from a stack on the floor by browsing a list. 
   Also the look command will describe floor stack as "You see a stack 
   of n items.", when there is more than one item on a floor grid, and 
   display a list of items when you press 'x' at that time.
   
-<a name="over_exert"></a>  </font><font color="#ffcc80">Allow casting spells when short of mana </font><font color="#8a8a8a">(over_exert)
-  </font><font color="#ffffff">Normally, you are prevented from casting spells when you don't have 
-  enough mana since accidentally doing so can have very nasty 
-  consequences, including death. If this option is set, then you are 
-  permitted to cast spells at such dangerous times, with a warning 
-  prompt, of course!
-  
 <a name="numpad_as_cursorkey"></a>  </font><font color="#ffcc80">Use numpad keys as cursor keys in editor mode </font><font color="#8a8a8a">(numpad_as_cursorkey)
   </font><font color="#ffffff">This option makes numpad keys work as cursor movement keys while text 
   editing mode. Which include auto-picker editor, inputing an 
   inscription, a macro action, and etc.
+  
+<a name="use_pack_slots"></a>  </font><font color="#ffcc80">Use and Display Inventory Slots </font><font color="#8a8a8a">(use_pack_slots)
+  </font><font color="#ffffff">With this option, the object prompt will use and display the current 
+  inventory slot for objects in question. For example, if your food 
+  happens to currently be in slot h), the the </font><font color="#ff9200">E</font><font color="#ffffff">at command will require 
+  you to press </font><font color="#ff9200">h </font><font color="#ffffff">to use this item. Without this option, each object 
+  prompt will begin labels at a). Some players prefer to keep the 
+  inventory slot, even though it constantly shifts as you add and 
+  remove new objects to your pack. Other players prefer to have 
+  commands use the same labels for the same objects upon successive 
+  calls (For example, pick up a spellbook and your food is now in the 
+  i) slot. This may puzzle you, since the last time you were hungry you 
+  pressed </font><font color="#ff9200">Eh</font><font color="#ffffff">, but now you need to press </font><font color="#ff9200">Ei</font><font color="#ffffff">. With this option turned 
+  off, eating rations of food will always be </font><font color="#ff9200">Ea </font><font color="#ffffff">... at least until you 
+  pick up some mushrooms! However, if you do, then your eye will 
+  quickly perceive the presence of two items in the object prompt next 
+  time you </font><font color="#ff9200">E</font><font color="#ffffff">at).
   
 <a name="MapScreen"></a></font><font color="#c00000">Map &amp; Screen Options
   
@@ -321,14 +335,14 @@ off after the creation is finished!
   somewhat. Note that this option is only useful when using macros, 
   resting, running, or repeating commands, since the output is always 
   flushed when the game is waiting for a keypress from the user.
-      
+  
 <a name="fresh_after"></a>  </font><font color="#ffcc80">Flush output after monster's move </font><font color="#8a8a8a">(fresh_after)
   </font><font color="#ffffff">This option forces the game to flush all output after not only every 
   player command, but also after every round of processing monsters and 
   objects, which will give you maximal information, but may slow down 
   the game a lot, especially on slower machines, and on faster machines 
   you normally do not have a chance to see the results anyway.
-      
+  
 <a name="fresh_message"></a>  </font><font color="#ffcc80">Flush output after every message </font><font color="#8a8a8a">(fresh_message)
   </font><font color="#ffffff">This option forces the game to flush all output after every message 
   displayed by the game. This will give you maximal information, but 
@@ -339,7 +353,7 @@ off after the creation is finished!
   machines, but horrible on most graphics machines. Note that only some 
   machines are able to *not* show the cursor, but on those machines, 
   hiding the cursor often speeds up the game and looks better.
-      
+  
 <a name="display_path"></a>  </font><font color="#ffcc80">Display actual path before shooting </font><font color="#8a8a8a">(display_path)
   </font><font color="#ffffff">When this option is set, the targeting mode will show path from you 
   to current target point continuously.
@@ -440,6 +454,11 @@ off after the creation is finished!
   lots of pets and don't wish to read a blow by blow account of the 
   battle raging around you.
   
+<a name="display_race"></a>  </font><font color="#ffcc80">Player character depends on their race </font><font color="#8a8a8a">(display_race)
+  </font><font color="#ffffff">With this option a player who plays as a Quylthulg, for example, will 
+  be represented by a Q. If the option is turned off the player will 
+  always be @. 
+  
 <a name="GamePlay"></a></font><font color="#c00000">Game Play Options
   
 <a name="stack_force_notes"></a>  </font><font color="#ffcc80">Merge inscriptions when stacking </font><font color="#8a8a8a">(stack_force_notes)
@@ -501,24 +520,23 @@ off after the creation is finished!
   
 <a name="find_ignore_stairs"></a>  </font><font color="#ffcc80">Run past stairs </font><font color="#8a8a8a">(find_ignore_stairs)
   </font><font color="#ffffff">Ignore stairs when running.
-      
+  
 <a name="find_ignore_doors"></a>  </font><font color="#ffcc80">Run through open doors </font><font color="#8a8a8a">(find_ignore_doors)
   </font><font color="#ffffff">Ignore open doors when running.
-      
+  
 <a name="find_cut"></a>  </font><font color="#ffcc80">Run past known corners </font><font color="#8a8a8a">(find_cut)
   </font><font color="#ffffff">Cut sharply around known corners when running. This will result in 
   faster running, but may cause you to run into a lurking monster.
   
 <a name="check_abort"></a>  </font><font color="#ffcc80">Check for user abort while continuous command </font><font color="#8a8a8a">(check_abort)
-  </font><font color="#ffffff">Avoid checking to see if the user has pressed a key during resting or 
-  running or repeated commands. This not only makes the game much more 
-  efficient (on many systems), but also allows the use of certain 
-  obscure macro sequences, such as turning this option on, resting 
-  until done, turning this option off, and casting a spell. Note that 
-  the use of this option may be dangerous on certain "graphic" 
-  machines. Resting for long periods of time with this option set is 
-  dangerous since the resting may not stop until the user takes damage 
-  from starvation.
+  </font><font color="#ffffff">Turning this option off will avoid checking to see if the user has 
+  pressed a key during resting or running or repeated commands. This 
+  not only makes the game much more efficient (on many systems), but 
+  also allows the use of certain obscure macro sequences, such as 
+  turning this option off, resting until done, turning this option on, 
+  and casting a spell. Resting for long periods of time with this 
+  option turned off is dangerous since the resting may not stop until 
+  the user takes damage from starvation.
   
 <a name="flush_failure"></a>  </font><font color="#ffcc80">Flush input on various failures </font><font color="#8a8a8a">(flush_failure)
   </font><font color="#ffffff">This option forces the game to flush all pending input whenever 
@@ -532,7 +550,7 @@ off after the creation is finished!
   character is "disturbed". This is useful if you use macros which take 
   time, since it will prevent you from continuing your macro while 
   being attacked by a monster.
-      
+  
 <a name="disturb_move"></a>  </font><font color="#ffcc80">Disturb whenever any monster moves </font><font color="#8a8a8a">(disturb_move)
   </font><font color="#ffffff">Disturb the player when any monster moves, appears, or disappears. 
   This includes monsters which are only visible due to telepathy, so 
@@ -562,7 +580,7 @@ off after the creation is finished!
 <a name="disturb_panel"></a>  </font><font color="#ffcc80">Disturb whenever map panel changes </font><font color="#8a8a8a">(disturb_panel)
   </font><font color="#ffffff">This option causes you to be disturbed by the map scrolling, as it 
   does automatically when you get close to the edge of the screen.
-      
+  
 <a name="disturb_state"></a>  </font><font color="#ffcc80">Disturb whenever player state changes </font><font color="#8a8a8a">(disturb_state)
   </font><font color="#ffffff">This option causes you to be disturbed whenever the player state 
   changes, including changes in hunger, resistance, confusion, etc.
@@ -574,7 +592,7 @@ off after the creation is finished!
   
 <a name="ring_bell"></a>  </font><font color="#ffcc80">Audible bell (on errors, etc) </font><font color="#8a8a8a">(ring_bell)
   </font><font color="#ffffff">Attempt to make a bell noise when various errors occur.
-      
+  
 <a name="disturb_trap_detect"></a>  </font><font color="#ffcc80">Disturb when leaving trap detected area </font><font color="#8a8a8a">(disturb_trap_detect)
   </font><font color="#ffffff">This option causes you to be disturbed when the player is running out 
   of trap-detected area.
@@ -598,12 +616,12 @@ off after the creation is finished!
     version, then you should not also enable the easy 
     version.
   
-<a name="destroy_feeling"></a>  </font><font color="#ffcc80">Apply auto-destroy as sense feeling </font><font color="#8a8a8a">(destroy_feeling)
+<a name="destroy_feeling"></a>  </font><font color="#ffcc80">Apply auto-destroy on sensing an item </font><font color="#8a8a8a">(destroy_feeling)
   </font><font color="#ffffff">If this option is turned on, both The Mogaminator and The Easy 
   Destroyer will take actions whenever the player senses the quality of 
   an object (i.e., whenever pseudo-id kicks in).
   
-<a name="destroy_identify"></a>  </font><font color="#ffcc80">Apply auto-destroy as identify an item </font><font color="#8a8a8a">(destroy_identify)
+<a name="destroy_identify"></a>  </font><font color="#ffcc80">Apply auto-destroy on identifying an item </font><font color="#8a8a8a">(destroy_identify)
   </font><font color="#ffffff">If this option is turned on, both The Mogaminator and The Easy 
   Destroyer will take actions whenever the player identifies an object, 
   whether with a spell or with a magical device (but, alas, not via a 

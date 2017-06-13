@@ -70,6 +70,31 @@ Inventory Commands
   slot should be easy to figure out: Helmets go on your "Head" slot and 
   Gloves go on your "Hands", etc.
 
+  Get Objects (g)
+  This command will get any objects located on the same tile as the 
+  player (autodestroyer applies). If there are no objects under the 
+  player, then this command does not cause the player to lose a turn.
+
+  Auto-Get Objects (^G)
+  This command will get any objects located on the same tile as the 
+  player (autodestroyer applies). In addition, this command will 
+  automatically get nearby objects by travelling to them (similar to 
+  running). With auto_get_objects enabled, any object registered for 
+  either auto-pickup or auto-destroy will qualify for automatic get. If 
+  that is too much for you (perhaps you enjoy cleaning up after 
+  battles?) then the auto_get_ammo option only applies to objects 
+  inscribed with =g (which is typically your ammo, or perhaps spikes if 
+  you are a ninja).
+  
+  Automatic travelling is very useful, and you won't travel too far 
+  since the objects must be visible to qualify. Hence, this option is 
+  much safer than, say, travelling using the object list which allows 
+  you to undertake lengthy automatic journeys (often into harms way!). 
+  The automatic get travelling will terminate when there are no more 
+  visible qualifying objects; if your pack becomes full; or if you are 
+  disturbed for any reason, such as a nasty dragon waking up and 
+  deciding to breathe on you.
+
   Drop Item (d)
   This drops an item from your inventory or equipment onto the dungeon 
   floor. If the floor spot you are standing on already has an object in 
@@ -166,15 +191,6 @@ Resting Commands
   This command can take a count. You may also use the "5" key (both 
   keysets).  If object auto-picker/destroyer is set up, specified 
   objects will be picked up or destroyed.
-
-  Stay Still (flip pickup) (g)
-  Stays in the same square for one move. If you normally pick up 
-  objects you encounter, you will not pick up whatever you are standing 
-  on. If you normally do not pick up objects, you will pick up what you 
-  are standing on. This command is normally only used when the 
-  "always_pickup" option is false. This command can take a count.  If 
-  object auto-picker/destroyer is set up, specified objects will be 
-  picked up or destroyed.
 
   Rest (R)
   Resting is better for you than repeatedly staying still, and can be 
@@ -758,9 +774,34 @@ Message Commands
   Extra Commands
   
     Repeat Last Command (n) or (X)
-    This command repeat previously executed command with all its 
+    This command repeats the previously executed command with all its 
     arguments. Very useful to repeat casting, for example, magic 
     missile to same opponent.
+  
+    Record Command (")
+    Commands that you enter may be recorded to any normal ascii 
+    character register. In fact, every command that you manually enter 
+    is automatically recorded to the . register. When you repeat the 
+    last command, you are really playing back the contents of this 
+    special . register. But you can also record the next command to a 
+    register of your choosing and then play it back manually later. For 
+    example, the command sequence "Fmae*t records the command mae*t to 
+    the F register in addition to the . register. You can later play 
+    back this command with 'F whereas playing back with '. or n is only 
+    valid on the very next turn.
+  
+    Playback Command (')
+    As mentioned above, you may record commands with the " command and 
+    play them back later with the ' command. Commands are stored in 
+    registers, each of which is addressed with a single ASCII 
+    character. For example, if you record a command with "t<cmd>, then 
+    you may later play it back by pressing 't. These command registers 
+    are temporary and will be erased every time you restart the game. 
+    To view your recorded commands, choose the ' register (i.e., press 
+    '' from the top level). You can then enter the register you wish to 
+    use (e.g. ''t works the same as 't except that the register 
+    contents of all recorded commands are displayed to you after you 
+    press the second ').
   
     Toggle Choice Window (^I)
     Toggles the display in the choice window (if available) between 
@@ -795,6 +836,7 @@ Message Commands
   Inventory Commands         Original        Roguelike
     Inventory List              i                 
     Equipment List              e                 
+    Get Objects                 g                 
     Drop Item                   d                 
     Destroy Item                k               ^D
     Wear/Wield Equipment        w                 
@@ -813,7 +855,6 @@ Message Commands
   
   Resting Commands           Original        Roguelike
     Stay (pickup)               ,                .
-    Stay (toggle pickup)        g                 
     Rest                        R                 
   
   Searching Commands         Original        Roguelike

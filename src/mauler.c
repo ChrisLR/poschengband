@@ -51,6 +51,15 @@ int mauler_get_toggle(void)
     return result;
 }
 
+static void _blast_obj(obj_ptr obj)
+{
+    char o_name[MAX_NLEN];
+    object_desc(o_name, obj, OD_OMIT_PREFIX | OD_COLOR_CODED);
+    msg_format("A terrible black aura blasts your %s!", o_name);
+    blast_object(obj);
+    disturb(1, 0);
+}
+
 void process_maul_of_vice(void)
 {
     int amt;
@@ -63,23 +72,16 @@ void process_maul_of_vice(void)
 
     if (p_ptr->au < 0)
     {
-        int i;
+        slot_t slot = pack_find_art(ART_MAUL_OF_VICE);
 
+        if (slot) _blast_obj(pack_obj(slot));
+        else
+        {
+            slot = equip_find_art(ART_MAUL_OF_VICE);
+            if (slot) _blast_obj(equip_obj(slot));
+        }
         p_ptr->au = 0;
         p_ptr->update |= PU_BONUS;
-
-        for (i = 0; i < INVEN_TOTAL; i++)
-        {
-            if (inventory[i].name1 == ART_MAUL_OF_VICE)
-            {
-                char o_name[MAX_NLEN];
-                object_desc(o_name, &inventory[i], OD_OMIT_PREFIX);
-                msg_format("A terrible black aura blasts your %s!", o_name);
-                blast_object(&inventory[i]);
-                disturb(1, 0);
-                break;
-            }
-        }
     }
     else if (p_ptr->au < 1000)
     {
@@ -673,7 +675,6 @@ static caster_info * _caster_info(void)
         me.magic_desc = "technique";
         me.options = CASTER_USE_HP;
         me.which_stat = A_STR;
-        me.weight = 1000;
         init = TRUE;
     }
     return &me;
@@ -688,6 +689,13 @@ static void _character_dump(doc_ptr doc)
 
         py_display_spells(doc, spells, ct);
     }
+}
+
+static void _birth(void)
+{
+    py_birth_obj_aux(TV_SWORD, SV_TWO_HANDED_SWORD, 1);
+    py_birth_obj_aux(TV_HARD_ARMOR, SV_CHAIN_MAIL, 1);
+    py_birth_obj_aux(TV_BOOTS, SV_PAIR_OF_METAL_SHOD_BOOTS, 1);
 }
 
 class_t *mauler_get_class(void)
@@ -722,7 +730,9 @@ class_t *mauler_get_class(void)
         me.base_hp = 18;
         me.exp = 120;
         me.pets = 40;
+        me.flags = CLASS_SENSE1_FAST | CLASS_SENSE1_STRONG;
 
+        me.birth = _birth;
         me.calc_bonuses = _calc_bonuses;
         me.calc_weapon_bonuses = _calc_weapon_bonuses;
         me.caster_info = _caster_info;

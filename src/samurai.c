@@ -20,7 +20,7 @@ cptr do_hissatsu_spell(int spell, int mode)
         if (cast)
         {
             project_length = 2;
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
 
             project_hook(GF_ATTACK, dir, HISSATSU_2, PROJECT_STOP | PROJECT_KILL);
         }
@@ -70,7 +70,10 @@ cptr do_hissatsu_spell(int spell, int mode)
         if (desc) return "Throws current weapon. And it'll return to your hand unless failed.";
         if (cast)
         {
-            if (!do_cmd_throw_aux(1, TRUE, 0)) return NULL;
+            py_throw_t context = {0};
+            context.type = THROW_BOOMERANG;
+            context.back_chance = 24 + randint1(5);
+            if (!py_throw(&context)) return NULL;
         }
         break;
 
@@ -529,7 +532,7 @@ cptr do_hissatsu_spell(int spell, int mode)
         if (cast)
         {
             int total_damage = 0, hand;
-            if (!get_aim_dir(&dir)) return NULL;
+            if (!get_fire_dir(&dir)) return NULL;
             msg_print("You swing your weapon downward.");
 
             for (hand = 0; hand < MAX_HANDS; hand++)
@@ -1111,7 +1114,7 @@ static int _max_sp(void)
     return MAX(p_ptr->msp*4, p_ptr->lev*5+5);
 }
 
-static void _concentrate(bool noisy)
+void cast_concentration(void)
 {
     int max_csp = _max_sp();
     if (total_friends)
@@ -1119,8 +1122,7 @@ static void _concentrate(bool noisy)
     if (p_ptr->special_defense & KATA_MASK)
         return;
         
-    if (noisy)
-        msg_print("You concentrate to charge your power.");
+    msg_print("You concentrate to charge your power.");
 
     p_ptr->csp += p_ptr->msp / 2;
     if (p_ptr->csp >= max_csp)
@@ -1156,8 +1158,7 @@ void samurai_concentration_spell(int cmd, variant *res)
             return;
         }
 
-        _concentrate(TRUE);
-
+        cast_concentration();
         var_set_bool(res, TRUE);
         break;
     }
@@ -1241,10 +1242,20 @@ static caster_info * _caster_info(void)
     {
         me.magic_desc = "technique";
         me.which_stat = A_WIS;
-        me.weight = 3000;
+        me.encumbrance.max_wgt = 3000;
+        me.encumbrance.weapon_pct = 0;
+        me.encumbrance.enc_wgt = 1200;
+        me.options = CASTER_SUPERCHARGE_MANA;
         init = TRUE;
     }
     return &me;
+}
+
+static void _birth(void)
+{
+    py_birth_obj_aux(TV_SWORD, SV_KATANA, 1);
+    py_birth_obj_aux(TV_HARD_ARMOR, SV_CHAIN_MAIL, 1);
+    py_birth_spellbooks();
 }
 
 class_t *samurai_get_class(void)
@@ -1289,7 +1300,9 @@ class_t *samurai_get_class(void)
         me.base_hp = 12;
         me.exp = 130;
         me.pets = 40;
+        me.flags = CLASS_SENSE1_FAST | CLASS_SENSE1_STRONG;
 
+        me.birth = _birth;
         me.caster_info = _caster_info;        
         me.calc_bonuses = _calc_bonuses;
         me.calc_stats = _calc_stats;

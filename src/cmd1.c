@@ -248,22 +248,35 @@ static int _max_vampiric_drain(void)
         msg_print("Only cursed Rune Swords may feed.");
 }
 
-static void death_scythe_miss(object_type *o_ptr, int hand, int mode)
+void death_scythe_miss(object_type *o_ptr, int hand, int mode)
 {
     u32b flgs[OF_ARRAY_SIZE];
     int k;
     critical_t crit;
+    int dd = o_ptr->dd;
+    int ds = o_ptr->ds;
+    int to_h = 0;
+    int to_d = 0;
 
     /* Sound */
     sound(SOUND_HIT);
 
     /* Message */
-    msg_print("Your scythe returns to you!");
+    if (hand == HAND_NONE) /* this is a thrown  weapon */
+        cmsg_print(TERM_VIOLET, "Your scythe viciously slashes you!");
+    else
+    {
+        cmsg_print(TERM_VIOLET, "Your scythe returns to you!");
+        dd += p_ptr->weapon_info[hand].to_dd;
+        ds += p_ptr->weapon_info[hand].to_ds;
+        to_h += p_ptr->weapon_info[hand].to_h;
+        to_d += p_ptr->weapon_info[hand].to_d;
+    }
 
     /* Extract the flags */
     obj_flags(o_ptr, flgs);
 
-    k = damroll(o_ptr->dd + p_ptr->weapon_info[hand].to_dd, o_ptr->ds + p_ptr->weapon_info[hand].to_ds);
+    k = damroll(dd, ds);
     {
         int mult;
         switch (p_ptr->mimic_form)
@@ -323,11 +336,6 @@ static void death_scythe_miss(object_type *o_ptr, int hand, int mode)
         if (!res_save_default(RES_POIS) && mult < 25)
             mult = 25;
 
-        if (p_ptr->tim_slay_sentient && p_ptr->weapon_info[hand].wield_how == WIELD_TWO_HANDS)
-        {
-            if (mult < 20) mult = 20;
-        }
-
         if ((have_flag(flgs, OF_BRAND_MANA) || p_ptr->tim_force) && (p_ptr->csp > (p_ptr->msp / 30)))
         {
             p_ptr->csp -= (1+(p_ptr->msp / 30));
@@ -339,7 +347,7 @@ static void death_scythe_miss(object_type *o_ptr, int hand, int mode)
         k /= 10;
     }
 
-    crit = critical_norm(o_ptr->weight, o_ptr->to_h, p_ptr->weapon_info[hand].to_h, mode, hand);
+    crit = critical_norm(o_ptr->weight, o_ptr->to_h, to_h, mode, hand);
     if (crit.desc)
     {
         k = k * crit.mul/100 + crit.to_d;
@@ -358,7 +366,7 @@ static void death_scythe_miss(object_type *o_ptr, int hand, int mode)
 
         k *= mult;
     }
-    k += (p_ptr->weapon_info[hand].to_d + o_ptr->to_d);
+    k += to_d + o_ptr->to_d;
 
     if (k < 0) k = 0;
 
@@ -440,32 +448,35 @@ critical_t critical_shot(int weight, int plus)
     int i, k;
 
     /* Extract "shot" power */
-    i = ((p_ptr->shooter_info.to_h + plus) * 4) + (p_ptr->lev * 2);
+    i = (p_ptr->shooter_info.to_h + plus) * 3 + p_ptr->skills.thb * 2;
 
-    /* Snipers can shot more critically with crossbows */
-    if (p_ptr->concent) i += ((i * p_ptr->concent) / 10);
-    if ((p_ptr->pclass == CLASS_SNIPER) && (p_ptr->shooter_info.tval_ammo == TV_BOLT)) i *= 2;
+    /* Snipers and Crossbowmasters get more crits */
+    if (p_ptr->concent) i += i * p_ptr->concent / 10;
+    if (p_ptr->pclass == CLASS_SNIPER && p_ptr->shooter_info.tval_ammo == TV_BOLT) i = i * 3 / 2;
+    if (weaponmaster_get_toggle() == TOGGLE_CAREFUL_AIM)
+        i *= 3;
+    if (p_ptr->pclass == CLASS_ARCHER) i += i * p_ptr->lev / 100;
 
     /* Critical hit */
     if (randint1(5000) <= i)
     {
         k = weight * randint1(500);
+        result.mul = 150 + k * 200 / 2000;
 
-        if (k < 900)
-        {
-            result.desc = "It was a good hit!";
-            result.mul = 150;
-        }
-        else if (k < 1350)
-        {
-            result.desc = "It was a great hit!";
-            result.mul = 200;
-        }
+        if (result.mul < 200)
+            result.desc = "It was a <color:y>decent</color> shot!";
+        /* k >= 500 */
+        else if (result.mul < 240)
+            result.desc = "It was a <color:R>good</color> shot!";
+        /* k >= 900 */
+        else if (result.mul < 270)
+            result.desc = "It was a <color:r>great</color> shot!";
+        /* k >= 1200 */
+        else if (result.mul < 300)
+            result.desc = "It was a <color:v>superb</color> shot!";
+        /* k >= 1500 */
         else
-        {
-            result.desc = "It was a superb hit!";
-            result.mul = 300;
-        }
+            result.desc = "It was a <color:v>*GREAT*</color> shot!";
     }
 
     return result;
@@ -475,12 +486,13 @@ critical_t critical_shot(int weight, int plus)
  * Critical hits (from bows/crossbows/slings)
  * Factor in item weight, total plusses, and player level.
  */
-s16b critical_throw(int weight, int plus, int dam)
+critical_t critical_throw(int weight, int plus)
 {
+    critical_t result = {0};
     int i, k;
 
     /* Extract "shot" power */
-    i = ((p_ptr->shooter_info.to_h + plus) * 4) + (p_ptr->lev * 3);
+    i = (p_ptr->shooter_info.to_h + plus)*4 + p_ptr->lev*3;
 
     /* Critical hit */
     if (randint1(5000) <= i)
@@ -489,22 +501,22 @@ s16b critical_throw(int weight, int plus, int dam)
 
         if (k < 400)
         {
-            msg_print("It was a good hit!");
-            dam += (dam / 2);
+            result.desc = "It was a <color:y>good</color> hit!";
+            result.mul = 150;
         }
         else if (k < 700)
         {
-            msg_print("It was a great hit!");
-            dam += dam;
+            result.desc = "It was a <color:R>great</color> hit!";
+            result.mul = 200;
         }
         else
         {
-            msg_print("It was a superb hit!");
-            dam += 3*dam/2;
+            result.desc = "It was a <color:r>superb</color> hit!";
+            result.mul = 250;
         }
     }
 
-    return (dam);
+    return result;
 }
 
 
@@ -703,6 +715,16 @@ s16b tot_dam_aux_monk(int tdam, monster_type *m_ptr, int mode)
         }
     }
 
+    if (p_ptr->tim_force) /* Craft skillmaster martial artist. Craft Monks cannot learn Mana Branding */
+    {
+        int cost = 1 + tdam / 7; /* 100 -> 170 for +70 costs 15 (4.7 dmg/sp) */
+        if (p_ptr->csp >= cost)
+        {
+            p_ptr->csp -= cost;
+            p_ptr->redraw |= (PR_MANA);
+            mult = mult * 12 / 10 + 5; /* 1.0x -> 1.7x; 1.7x -> 2.5x; 2.5x -> 3.5x */
+        }
+    }
     return tdam * mult / 10 + bonus;
 }
 
@@ -758,6 +780,9 @@ s16b tot_dam_aux(object_type *o_ptr, int tdam, monster_type *m_ptr, s16b hand, i
             break;
         case DRACONIAN_STRIKE_POIS:
             add_flag(flgs, OF_BRAND_POIS);
+            break;
+        case PY_ATTACK_MANA:
+            add_flag(flgs, OF_BRAND_MANA);
             break;
         }
     }
@@ -1400,6 +1425,9 @@ s16b tot_dam_aux(object_type *o_ptr, int tdam, monster_type *m_ptr, s16b hand, i
                 else
                     cost = (1 + (dd * ds / 7));
 
+                if (thrown)
+                    cost *= 3;
+
                 if (caster && (caster->options & CASTER_USE_AU))
                 {
                     cost *= 10;
@@ -1526,234 +1554,6 @@ void search(void)
         }
     }
 }
-
-
-/*
- * Helper routine for py_pickup() and py_pickup_floor().
- *
- * Add the given dungeon object to the character's inventory.
- *
- * Delete the object afterwards.
- */
-void py_pickup_aux(int o_idx)
-{
-    int slot, i;
-
-    char o_name[MAX_NLEN];
-
-    object_type *o_ptr;
-
-    o_ptr = &o_list[o_idx];
-
-    /* Carry the object */
-    slot = inven_carry(o_ptr);
-
-    /* Get the object again */
-    o_ptr = &inventory[slot];
-
-    /* Delete the object */
-    delete_object_idx(o_idx);
-
-    if ( p_ptr->personality == PERS_MUNCHKIN
-      || randint0(1000) < virtue_current(VIRTUE_KNOWLEDGE) )
-    {
-        bool old_known = identify_item(o_ptr);
-
-        /* Auto-inscription/destroy */
-        autopick_alter_item(slot, (bool)(destroy_identify && !old_known));
-
-        /* If it is destroyed, don't pick it up */
-        if (o_ptr->marked & OM_AUTODESTROY) return;
-    }
-
-    /* Describe the object */
-    object_desc(o_name, o_ptr, OD_COLOR_CODED);
-
-    /* Message */
-    msg_format("You have %s (%c).", o_name, index_to_label(slot));
-
-    /* Runes confer benefits even when in inventory */
-    p_ptr->update |= PU_BONUS;
-
-    /* Hack: Archaeologists Instantly Pseudo-ID artifacts on pickup */
-    if ( p_ptr->pclass == CLASS_ARCHAEOLOGIST
-      && object_is_artifact(o_ptr)
-      && !object_is_known(o_ptr) )
-    {
-        /* Suppress you are leaving something special behind message ... */
-        if (p_ptr->sense_artifact)
-        {
-            p_ptr->sense_artifact = FALSE;    /* There may be more than one? */
-            p_ptr->redraw |= PR_STATUS;
-        }
-
-        if (!(o_ptr->ident & (IDENT_SENSE)))
-        {
-            cmsg_format(TERM_L_BLUE, "You feel that the %s is %s...", o_name, game_inscriptions[FEEL_SPECIAL]);
-
-            o_ptr->ident |= (IDENT_SENSE);
-            o_ptr->feeling = FEEL_SPECIAL;
-        }
-    }
-
-    /* Check if completed a quest */
-    for (i = 0; i < max_quests; i++)
-    {
-        if ((quest[i].type == QUEST_TYPE_FIND_ARTIFACT) &&
-            (quest[i].status == QUEST_STATUS_TAKEN) &&
-               (quest[i].k_idx == o_ptr->name1 || quest[i].k_idx == o_ptr->name3))
-        {
-            quest[i].status = QUEST_STATUS_COMPLETED;
-            quest[i].complev = (byte)p_ptr->lev;
-            msg_print("You completed your quest!");
-            msg_print(NULL);
-        }
-    }
-}
-
-
-/*
- * Player "wants" to pick up an object or gold.
- * Note that we ONLY handle things that can be picked up.
- * See "move_player()" for handling of other things.
- */
-void carry(bool pickup)
-{
-    cave_type *c_ptr = &cave[py][px];
-
-    s16b this_o_idx, next_o_idx = 0;
-
-    char    o_name[MAX_NLEN];
-
-    /* Recenter the map around the player */
-    viewport_verify();
-
-    /* Update stuff */
-    p_ptr->update |= (PU_MONSTERS);
-
-    /* Redraw map */
-    p_ptr->redraw |= (PR_MAP);
-
-    /* Window stuff */
-    p_ptr->window |= (PW_OVERHEAD);
-
-    /* Handle stuff */
-    handle_stuff();
-
-    /* Automatically pickup/destroy/inscribe items */
-    autopick_pickup_items(c_ptr);
-
-#ifdef ALLOW_EASY_FLOOR
-
-    if (easy_floor)
-    {
-        py_pickup_floor(pickup);
-        return;
-    }
-
-#endif /* ALLOW_EASY_FLOOR */
-
-    /* Scan the pile of objects */
-    for (this_o_idx = c_ptr->o_idx; this_o_idx; this_o_idx = next_o_idx)
-    {
-        object_type *o_ptr;
-
-        /* Acquire object */
-        o_ptr = &o_list[this_o_idx];
-
-#ifdef ALLOW_EASY_SENSE /* TNB */
-
-        /* Option: Make item sensing easy */
-        if (easy_sense)
-        {
-            /* Sense the object */
-            (void)sense_object(o_ptr);
-        }
-
-#endif /* ALLOW_EASY_SENSE -- TNB */
-
-        /* Describe the object */
-        object_desc(o_name, o_ptr, OD_COLOR_CODED);
-
-        /* Acquire next object */
-        next_o_idx = o_ptr->next_o_idx;
-
-        /* Hack -- disturb */
-        disturb(0, 0);
-
-        /* Pick up gold */
-        if (o_ptr->tval == TV_GOLD)
-        {
-            int value = o_ptr->pval;
-
-            /* Delete the gold */
-            delete_object_idx(this_o_idx);
-
-            /* Message */
-            msg_format("You collect %d gold pieces worth of %s.",
-                   value, o_name);
-
-            sound(SOUND_SELL);
-
-            /* Collect the gold */
-            p_ptr->au += value;
-            stats_on_gold_find(value);
-
-            /* Redraw gold */
-            p_ptr->redraw |= (PR_GOLD);
-
-            if (prace_is_(RACE_MON_LEPRECHAUN))
-                p_ptr->update |= (PU_BONUS | PU_HP | PU_MANA);
-        }
-
-        /* Pick up objects */
-        else
-        {
-            /* Hack - some objects were handled in autopick_pickup_items(). */
-            if (o_ptr->marked & OM_NOMSG)
-            {
-                /* Clear the flag. */
-                o_ptr->marked &= ~OM_NOMSG;
-            }
-            /* Describe the object */
-            else if (!pickup)
-            {
-                msg_format("You see %s.", o_name);
-
-            }
-
-            /* Note that the pack is too full */
-            else if (!inven_carry_okay(o_ptr))
-            {
-                msg_format("You have no room for %s.", o_name);
-
-            }
-
-            /* Pick up the item (if requested and allowed) */
-            else
-            {
-                int okay = TRUE;
-
-                /* Hack -- query every item */
-                if (carry_query_flag)
-                {
-                    char out_val[MAX_NLEN+20];
-                    sprintf(out_val, "Pick up %s? ", o_name);
-
-                    okay = get_check(out_val);
-                }
-
-                /* Attempt to pick up an object. */
-                if (okay)
-                {
-                    /* Pick up the object */
-                    py_pickup_aux(this_o_idx);
-                }
-            }
-        }
-    }
-}
-
 
 /*
  * Determine if a trap affects the player.
@@ -2336,11 +2136,26 @@ static int _get_num_blow_innate(int which)
 
 static void do_monster_knockback(int x, int y, int dist);
 
+void wizard_report_damage(int amt)
+{
+#if 0
+    static int count = 0;
+    static int total = 0;
+
+    count++;
+    total += amt;
+    cmsg_format(TERM_L_RED, "You did %d damage (%d Avg).", amt, total / count);
+#endif
+}
+
 static void innate_attacks(s16b m_idx, bool *fear, bool *mdeath, int mode)
 {
     int             dam, base_dam, effect_pow, to_h, chance;
     monster_type    *m_ptr = &m_list[m_idx];
     monster_race    *r_ptr = &r_info[m_ptr->r_idx];
+    byte            old_fy = m_ptr->fy, old_fx = m_ptr->fx;
+    int             old_hp = m_ptr->hp;
+    int             old_r_idx = m_ptr->r_idx;
     char            m_name_subject[MAX_NLEN], m_name_object[MAX_NLEN];
     int             i, j, k;
     int             delay_sleep = 0;
@@ -2414,15 +2229,23 @@ static void innate_attacks(s16b m_idx, bool *fear, bool *mdeath, int mode)
         int               blows = _get_num_blow_innate(i);
 
         if (a->flags & INNATE_SKIP) continue;
+        if (m_ptr->fy != old_fy || m_ptr->fx != old_fx) break; /* Teleport Effect? */
 
-        if (r_ptr->level + 10 > p_ptr->lev)
-            skills_innate_gain(skills_innate_calc_name(a));
+        skills_innate_gain(skills_innate_calc_name(a), r_ptr->level);
 
         for (j = 0; j < blows; j++)
         {
+            int ac = MON_AC(r_ptr, m_ptr);
+
+            if (m_ptr->fy != old_fy || m_ptr->fx != old_fx) break; /* Teleport Effect? */
+
             to_h = a->to_h + p_ptr->to_h_m;
             chance = p_ptr->skills.thn + (to_h * BTH_PLUS_ADJ);
-            if (fuiuchi || test_hit_norm(chance, MON_AC(r_ptr, m_ptr), m_ptr->ml))
+
+            if (prace_is_(RACE_MON_GOLEM))
+                ac = ac * (100 - p_ptr->lev) / 100;
+
+            if (fuiuchi || test_hit_norm(chance, ac, m_ptr->ml))
             {
                 int dd = a->dd + p_ptr->innate_attack_info.to_dd;
 
@@ -2531,6 +2354,8 @@ static void innate_attacks(s16b m_idx, bool *fear, bool *mdeath, int mode)
                 {
                     int e = a->effect[k];
                     int p = a->effect_chance[k];
+
+                    if (m_ptr->fy != old_fy || m_ptr->fx != old_fx) break; /* Teleport Effect? */
 
                     if (p == 0) p = 100;
                     if (!e && k == 0)
@@ -2652,6 +2477,9 @@ static void innate_attacks(s16b m_idx, bool *fear, bool *mdeath, int mode)
                     if (!e) continue;
                     if (randint1(100) > p) continue;
 
+                    if (p_ptr->current_r_idx == MON_AETHER_VORTEX)
+                        e = vortex_get_effect();
+
                     switch (e)
                     {
                     case GF_MISSILE:
@@ -2713,9 +2541,16 @@ static void innate_attacks(s16b m_idx, bool *fear, bool *mdeath, int mode)
                             project(0, 0, m_ptr->fy, m_ptr->fx, base_dam, GF_STUN, PROJECT_KILL|PROJECT_HIDE|PROJECT_NO_PAIN|PROJECT_SHORT_MON_NAME, -1);
                         }
                         break;
-                    default:
-                        project(0, 0, m_ptr->fy, m_ptr->fx, effect_pow, e, PROJECT_KILL|PROJECT_HIDE|PROJECT_NO_PAIN|PROJECT_SHORT_MON_NAME, -1);
+                    default:                             /* v--- Check for pure elemental attack (e.g. Fire vortex) */
+                        project(0, 0, m_ptr->fy, m_ptr->fx, k ? effect_pow : dam, e, PROJECT_KILL|PROJECT_HIDE|PROJECT_NO_PAIN|PROJECT_SHORT_MON_NAME, -1);
                         *mdeath = (m_ptr->r_idx == 0);
+                        /* Polymorph effect? */
+                        if (m_ptr->r_idx && m_ptr->r_idx != old_r_idx)
+                        {
+                            old_r_idx = m_ptr->r_idx;
+                            monster_desc(m_name_subject, m_ptr, MD_PRON_VISIBLE);
+                            monster_desc(m_name_object, m_ptr, MD_PRON_VISIBLE | MD_OBJECTIVE);
+                        }
                     }
                 }
                 /* TODO: Should rings of power brand innate attacks? */
@@ -2727,7 +2562,11 @@ static void innate_attacks(s16b m_idx, bool *fear, bool *mdeath, int mode)
                     return;
                 }
 
-                if (*mdeath) return;
+                if (*mdeath)
+                {
+                    wizard_report_damage(old_hp);
+                    return;
+                }
 
                 on_p_hit_m(m_idx);
 
@@ -2772,6 +2611,8 @@ static void innate_attacks(s16b m_idx, bool *fear, bool *mdeath, int mode)
         else
             teleport_player(25 + p_ptr->lev/2, 0L);
     }
+
+    wizard_report_damage(old_hp - m_ptr->hp);
 }
 
 /*
@@ -2954,11 +2795,8 @@ static bool py_attack_aux(int y, int x, bool *fear, bool *mdeath, s16b hand, int
         ds = 1;
         to_h = 0;
         to_d = 0;
-        if ( (p_ptr->pclass == CLASS_MONK || p_ptr->pclass == CLASS_FORCETRAINER || p_ptr->pclass == CLASS_MYSTIC)
-          && !p_ptr->riding )
-        {
+        if (p_ptr->monk_lvl && !p_ptr->riding)
             monk_attack = TRUE;
-        }
     }
 
     if (p_ptr->painted_target)
@@ -3017,17 +2855,27 @@ static bool py_attack_aux(int y, int x, bool *fear, bool *mdeath, s16b hand, int
                 backstab = TRUE;
         }
         break;
+    case CLASS_SKILLMASTER:
+        if (MON_CSLEEP(m_ptr) && m_ptr->ml) /* Works for Martial Arts as well */
+        {
+            if (p_ptr->ambush || (p_ptr->special_defense & NINJA_S_STEALTH))
+                backstab = TRUE;
+        }
+        else if (p_ptr->special_defense & NINJA_S_STEALTH) /* Burglary Hide in Shadows */
+        {
+            int tmp = p_ptr->lev * 6 + (p_ptr->skills.stl + 10) * 4;
+            if (randint0(tmp) > r_ptr->level + 20 && m_ptr->ml && !(r_ptr->flagsr & RFR_RES_ALL))
+                fuiuchi = TRUE;
+        }
+        break;
     }
 
     if (o_ptr)
     {
-        if (r_ptr->level + 10 > p_ptr->lev)
-        {
-            if (weaponmaster_get_toggle() == TOGGLE_SHIELD_BASH && o_ptr->tval == TV_SHIELD)
-                skills_shield_gain(o_ptr->sval);
-            else
-                skills_weapon_gain(o_ptr->tval, o_ptr->sval);
-        }
+        if (weaponmaster_get_toggle() == TOGGLE_SHIELD_BASH && o_ptr->tval == TV_SHIELD)
+            skills_shield_gain(o_ptr->sval, r_ptr->level);
+        else
+            skills_weapon_gain(o_ptr->tval, o_ptr->sval, r_ptr->level);
     }
     else
     {
@@ -3124,6 +2972,7 @@ static bool py_attack_aux(int y, int x, bool *fear, bool *mdeath, s16b hand, int
 
             success_hit = one_in_(n);
         }
+        else if (fuiuchi && !(r_ptr->flagsr & RFR_RES_ALL)) success_hit = TRUE;
         else if ((p_ptr->pclass == CLASS_NINJA) && ((backstab || fuiuchi) && !(r_ptr->flagsr & RFR_RES_ALL))) success_hit = TRUE;
         else if (duelist_attack && one_in_(2))
         {
@@ -3163,10 +3012,10 @@ static bool py_attack_aux(int y, int x, bool *fear, bool *mdeath, s16b hand, int
                 }
             }
 
-            if (backstab) cmsg_format(TERM_L_GREEN, "You cruelly stab %s!", m_name_object);
+            if (backstab) cmsg_format(TERM_L_GREEN, "You cruelly attack %s!", m_name_object);
             else if (fuiuchi) cmsg_format(TERM_L_GREEN, "You make a surprise attack, and hit %s with a powerful blow!", m_name_object);
             else if (stab_fleeing) cmsg_format(TERM_L_GREEN, "You backstab %s!",  m_name_object);
-            else if (perfect_strike) cmsg_format(TERM_L_GREEN, "You land a perfect strike against %s.", m_name_object);
+            else if (perfect_strike) msg_format("You land a <color:G>perfect strike</color> against %s.", m_name_object);
             else if (!monk_attack) msg_format("You hit.", m_name_object);
 
             /* Hack -- bare hands do one damage */
@@ -3183,7 +3032,7 @@ static bool py_attack_aux(int y, int x, bool *fear, bool *mdeath, s16b hand, int
             if ( have_flag(flgs, OF_BRAND_VAMP)
               || chaos_effect == 1
               || mode == HISSATSU_DRAIN
-              || mode == DRACONIAN_STRIKE_VAMP
+              || mode == PY_ATTACK_VAMP
               || hex_spelling(HEX_VAMP_BLADE)
               || weaponmaster_get_toggle() == TOGGLE_BLOOD_BLADE
               || mauler_get_toggle() == MAULER_TOGGLE_DRAIN )
@@ -3201,7 +3050,7 @@ static bool py_attack_aux(int y, int x, bool *fear, bool *mdeath, s16b hand, int
                   || have_flag(flgs, OF_VORPAL2)
                   || hex_spelling(HEX_RUNESWORD)
                   || p_ptr->vorpal
-                  || mode == DRACONIAN_STRIKE_VORPAL )
+                  || mode == PY_ATTACK_VORPAL )
                 {
                     if (randint1(vorpal_chance*3/2) == 1)
                         vorpal_cut = TRUE;
@@ -3223,6 +3072,12 @@ static bool py_attack_aux(int y, int x, bool *fear, bool *mdeath, s16b hand, int
                 k = damroll(ma_ptr->dd + p_ptr->weapon_info[hand].to_dd, ma_ptr->ds + p_ptr->weapon_info[hand].to_ds);
                 k = tot_dam_aux_monk(k, m_ptr, mode);
 
+                if (backstab || fuiuchi) /* skillmaster (stealthy or hiding in shadows) */
+                {
+                    int mult = 250 + p_ptr->lev * 4;
+                    if (backstab) mult += 50;
+                    k = k * mult / 100;
+                }
                 if (p_ptr->special_attack & ATTACK_SUIKEN) k *= 2; /* Drunken Boxing! */
 
                 if (ma_ptr->effect == MA_KNEE)
@@ -3530,13 +3385,13 @@ static bool py_attack_aux(int y, int x, bool *fear, bool *mdeath, s16b hand, int
                     && !(r_ptr->flags1 & (RF1_UNIQUE))
                     && !mon_save_p(m_ptr->r_idx, A_DEX) )
                 {
-                    msg_format("You hamstring %s.", m_name_object);
+                    msg_format("You <color:y>hamstring</color> %s.", m_name_object);
                     set_monster_slow(c_ptr->m_idx, MON_SLOW(m_ptr) + 50);
                 }
                 if ( p_ptr->lev >= 20    /* Wounding Strike */
                     && !mon_save_p(m_ptr->r_idx, A_DEX) )
                 {
-                    msg_format("%^s is dealt a wounding strike.", m_name_subject);
+                    msg_format("%^s is dealt a <color:r>wounding</color> strike.", m_name_subject);
                     k += MIN(m_ptr->hp / 5, randint1(3) * d);
                     drain_result = k;
                 }
@@ -3544,13 +3399,13 @@ static bool py_attack_aux(int y, int x, bool *fear, bool *mdeath, s16b hand, int
                     && !(r_ptr->flags3 & (RF3_NO_STUN))
                     && !mon_save_p(m_ptr->r_idx, A_DEX) )
                 {
-                    msg_format("%^s is dealt a stunning blow.", m_name_subject);
+                    msg_format("%^s is dealt a <color:B>stunning</color> blow.", m_name_subject);
                     set_monster_stunned(c_ptr->m_idx, MAX(MON_STUNNED(m_ptr), 2));
                 }
                 if ( p_ptr->lev >= 40    /* Greater Wounding Strike */
                     && !mon_save_p(m_ptr->r_idx, A_DEX) )
                 {
-                    msg_format("%^s is dealt a *WOUNDING* strike.", m_name_subject);
+                    msg_format("%^s is dealt a <color:v>*WOUNDING*</color> strike.", m_name_subject);
                     k += MIN(m_ptr->hp * 2 / 5, rand_range(2, 10) * d);
                     drain_result = k;
                 }
@@ -3836,7 +3691,7 @@ static bool py_attack_aux(int y, int x, bool *fear, bool *mdeath, s16b hand, int
 
                     if (p_ptr->lev >= 35)    /* Endless Duel */
                     {
-                        /* Hacks so that get_aim_dir() actually allows user to select a new target */
+                        /* Hacks so that get_fire_dir() actually allows user to select a new target */
                         target_who = 0;
                         command_dir = 0;
                         msg_print("Your chosen target is vanquished!  Select another.");
@@ -3846,12 +3701,15 @@ static bool py_attack_aux(int y, int x, bool *fear, bool *mdeath, s16b hand, int
                         msg_print("Your chosen target is vanquished!");
                 }
 
-                if ((p_ptr->pclass == CLASS_BERSERKER || mut_present(MUT_FANTASTIC_FRENZY) || p_ptr->tim_shrike) && energy_use)
+                if ((p_ptr->pclass == CLASS_BERSERKER || mut_present(MUT_FANTASTIC_FRENZY)) && energy_use)
                 {
+                    int ct = MAX(1, p_ptr->weapon_ct); /* paranoia ... if we are called with 0, that is a bug (I cannot reproduce) */
+                    int frac = 100/ct;                 /* Perhaps the 'zerker leveled up to 35 in the middle of a round of attacks? */
+
                     energy_use = 0;
-                    if (hand)
-                        energy_use += (hand - 1) * 100 / p_ptr->weapon_ct;
-                    energy_use += num * (100 / p_ptr->weapon_ct) / num_blow;
+                    if (hand) /* hand is 0, 1, ... so hand is the number of successful rounds of attacks so far */
+                        energy_use += hand * frac;
+                    energy_use += num * frac / num_blow;
                 }
                 if (o_ptr && o_ptr->name1 == ART_ZANTETSU && is_lowlevel)
                     msg_print("Sigh... Another trifling thing I've cut....");
@@ -4193,7 +4051,8 @@ static bool py_attack_aux(int y, int x, bool *fear, bool *mdeath, s16b hand, int
 
             else if ((chaos_effect == 5) && (randint1(90) > r_ptr->level))
             {
-                if (!(r_ptr->flags1 & (RF1_UNIQUE | RF1_QUESTOR)) &&
+                if (!(r_ptr->flags1 & RF1_UNIQUE) &&
+                    !(m_ptr->mflag2 & MFLAG2_QUESTOR) && 
                     !(r_ptr->flagsr & RFR_EFF_RES_CHAO_MASK))
                 {
                     if (polymorph_monster(y, x))
@@ -4226,7 +4085,8 @@ static bool py_attack_aux(int y, int x, bool *fear, bool *mdeath, s16b hand, int
                     m_ptr->hold_o_idx = q_ptr->next_o_idx;
                     q_ptr->next_o_idx = 0;
                     msg_format("You snatched %s.", o_name);
-                    inven_carry(q_ptr);
+                    pack_carry(q_ptr);
+                    obj_release(q_ptr, OBJ_RELEASE_QUIET);
                 }
             }
 
@@ -4317,6 +4177,12 @@ static bool py_attack_aux(int y, int x, bool *fear, bool *mdeath, s16b hand, int
         if (mode == MYSTIC_KILL) break;
         if (mode == MYSTIC_KNOCKOUT) break;
         if (mode == MYSTIC_CONFUSE) break;
+        if (!p_ptr->weapon_ct) break; /* Draconian Metamorphosis in the middle of attacking ... mon_take_hit -> gain_exp ->
+                                         gain level 35 -> change body type -> drop all weapons -> handle_stuff -> continue attacks!
+                                         BTW: Gaining experience and calling handle_stuff in the middle of a round of attacks
+                                         causes numerous other problems and should be removed at some point. The problem is that
+                                         handle_stuff is like a virus ... someone will keep calling it to resurface these sorts
+                                         of issues! */
     }
 
     if (mode == WEAPONMASTER_ELUSIVE_STRIKE && hit_ct)
@@ -4457,7 +4323,7 @@ bool py_attack(int y, int x, int mode)
 
     if ( (r_ptr->flags1 & RF1_FEMALE)
       && !(p_ptr->stun || p_ptr->confused || p_ptr->image || !m_ptr->ml)
-      && equip_find_artifact(ART_ZANTETSU))
+      && equip_find_art(ART_ZANTETSU))
     {
         msg_print("I can not attack women!");
         return FALSE;
@@ -4472,7 +4338,7 @@ bool py_attack(int y, int x, int mode)
     if ( !is_hostile(m_ptr)
       && !(p_ptr->stun || p_ptr->confused || p_ptr->image || IS_SHERO() || !m_ptr->ml) )
     {
-        if (equip_find_artifact(ART_STORMBRINGER))
+        if (equip_find_art(ART_STORMBRINGER))
         {
             msg_format("Your black blade greedily attacks %s!", m_name);
             virtue_add(VIRTUE_INDIVIDUALISM, 1);
@@ -4996,36 +4862,64 @@ bool player_can_enter(s16b feature, u16b mode)
 
 static bool _auto_detect_traps(void)
 {
-    int i;
+    slot_t slot;
     if (p_ptr->pclass == CLASS_BERSERKER) return FALSE;
     if (p_ptr->pclass == CLASS_MAGIC_EATER && magic_eater_auto_detect_traps()) return TRUE;
 
-    i = pack_find(TV_SCROLL, SV_SCROLL_DETECT_TRAP);
-    if (i >= 0 && !p_ptr->blind && !(get_race()->flags & RACE_IS_ILLITERATE))
+    slot = pack_find_obj(TV_SCROLL, SV_SCROLL_DETECT_TRAP);
+    if (slot && !p_ptr->blind && !(get_race()->flags & RACE_IS_ILLITERATE))
     {
+        obj_ptr scroll = pack_obj(slot);
         detect_traps(DETECT_RAD_DEFAULT, TRUE);
-        stats_on_use(&inventory[i], 1);
-        inven_item_increase(i, -1);
-        inven_item_describe(i);
-        inven_item_optimize(i);
+        stats_on_use(scroll, 1);
+        scroll->number--;
+        obj_release(scroll, 0);
         return TRUE;
     }
-    i = pack_find_device(EFFECT_DETECT_TRAPS);
-    if (i >= 0)
+    slot = pack_find_device(EFFECT_DETECT_TRAPS);
+    if (slot)
     {
+        obj_ptr device = pack_obj(slot);
         detect_traps(DETECT_RAD_DEFAULT, TRUE);
-        stats_on_use(&inventory[i], 1);
-        device_decrease_sp(&inventory[i], inventory[i].activation.cost);
-        inven_item_charges(i);
+        stats_on_use(device, 1);
+        device_decrease_sp(device, device->activation.cost);
         return TRUE;
     }
-    i = pack_find_device(EFFECT_DETECT_ALL);
-    if (i >= 0)
+    slot = pack_find_device(EFFECT_DETECT_ALL);
+    if (slot)
     {
+        obj_ptr device = pack_obj(slot);
         detect_all(DETECT_RAD_DEFAULT);
-        stats_on_use(&inventory[i], 1);
-        device_decrease_sp(&inventory[i], inventory[i].activation.cost);
-        inven_item_charges(i);
+        stats_on_use(device, 1);
+        device_decrease_sp(device, device->activation.cost);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+static bool _auto_mapping(void)
+{
+    slot_t slot;
+    if (p_ptr->pclass == CLASS_BERSERKER) return FALSE;
+    /*if (p_ptr->pclass == CLASS_MAGIC_EATER && magic_eater_auto_mapping()) return TRUE;*/
+
+    slot = pack_find_obj(TV_SCROLL, SV_SCROLL_MAPPING);
+    if (slot && !p_ptr->blind && !(get_race()->flags & RACE_IS_ILLITERATE))
+    {
+        obj_ptr scroll = pack_obj(slot);
+        map_area(DETECT_RAD_MAP);
+        stats_on_use(scroll, 1);
+        scroll->number--;
+        obj_release(scroll, 0);
+        return TRUE;
+    }
+    slot = pack_find_device(EFFECT_ENLIGHTENMENT);
+    if (slot)
+    {
+        obj_ptr device = pack_obj(slot);
+        map_area(DETECT_RAD_MAP);
+        stats_on_use(device, 1);
+        device_decrease_sp(device, device->activation.cost);
         return TRUE;
     }
     return FALSE;
@@ -5040,6 +4934,7 @@ bool move_player_effect(int ny, int nx, u32b mpe_mode)
     cave_type *c_ptr = &cave[ny][nx];
     feature_type *f_ptr = &f_info[c_ptr->feat];
     bool old_dtrap = FALSE, new_dtrap = FALSE;
+    bool old_map = FALSE, new_map = FALSE;
 
     if (cave[py][px].info & CAVE_IN_DETECT)
         old_dtrap = TRUE;
@@ -5056,6 +4951,19 @@ bool move_player_effect(int ny, int nx, u32b mpe_mode)
             cmsg_print(TERM_VIOLET, "You are about to leave a trap detected zone.");
             return FALSE;
         }
+    }
+
+    /* Automatically detecting traps is just so lovable. Let's try the same
+     * with Magic Mapping! */
+    if (cave[py][px].info & CAVE_IN_MAP)
+        old_map = TRUE;
+    if (cave[ny][nx].info & CAVE_IN_MAP)
+        new_map = TRUE;
+
+    if (!(mpe_mode & MPE_STAYING) && (running || travel.run))
+    {
+        if (old_map && !new_map)
+            _auto_mapping();
     }
 
     if (cave[py][px].info & CAVE_IN_DETECT)
@@ -5140,6 +5048,25 @@ bool move_player_effect(int ny, int nx, u32b mpe_mode)
         p_ptr->update |= (PU_VIEW | PU_LITE | PU_FLOW | PU_MON_LITE | PU_DISTANCE);
         p_ptr->window |= PW_MONSTER_LIST | PW_OBJECT_LIST;
 
+        /* Position Targets are confusing. They should be dismissed when no longer valid.
+         * Note: Originally, I had this check in target_okay(), which is, of course, called
+         * fairly often and repeatedly. While this had the fortunate side effect of preventing
+         * many 'trick shot' projection abuses, it also messed up 'disintegration' effects
+         * (such as Breathe Disintegration or Beam of Disintegration). For these, the user
+         * needs to target a non-projectable monster. As a compromise, we will continue to
+         * dismiss such targets, but only once the player moves. */
+        if (target_who < 0)
+        {
+            if ( !in_bounds(target_row, target_col)
+              || !projectable(py, px, target_row, target_col) )
+            {
+                target_who = 0;
+                target_row = 0;
+                target_col = 0;
+                p_ptr->redraw |= PR_HEALTH_BARS;
+            }
+        }
+
         if (!view_unsafe_grids)
             p_ptr->redraw |= PR_STATUS;
 
@@ -5152,7 +5079,10 @@ bool move_player_effect(int ny, int nx, u32b mpe_mode)
                 race_ptr->move_player();
 
             if (!dun_level && !p_ptr->wild_mode && !p_ptr->inside_arena && !p_ptr->inside_battle)
+            {
                 wilderness_move_player(ox, oy);
+                c_ptr = &cave[py][px]; /* re-aquire in case of wilderness scroll */
+            }
         }
 
         /* Window stuff */
@@ -5214,7 +5144,22 @@ bool move_player_effect(int ny, int nx, u32b mpe_mode)
     /* Handle "objects" */
     if (!(mpe_mode & MPE_DONT_PICKUP))
     {
-        carry((mpe_mode & MPE_DO_PICKUP) ? TRUE : FALSE);
+        if (mpe_mode & MPE_DO_PICKUP)
+            pack_get_floor();
+        else
+        {
+            char name[MAX_NLEN];
+            int  this_o_idx, next_o_idx = 0;
+            autopick_get_floor();
+            for (this_o_idx = c_ptr->o_idx; this_o_idx; this_o_idx = next_o_idx)
+            {
+                obj_ptr obj = &o_list[this_o_idx];
+                next_o_idx = obj->next_o_idx;
+                object_desc(name, obj, OD_COLOR_CODED);
+                msg_format("You see %s.", name);
+                disturb(0, 0);
+            }
+        }
     }
 
     /* Handle "store doors" */
@@ -5248,26 +5193,6 @@ bool move_player_effect(int ny, int nx, u32b mpe_mode)
         energy_use = 0;
         /* Hack -- Enter quest level */
         command_new = SPECIAL_KEY_QUEST;
-    }
-
-    else if (have_flag(f_ptr->flags, FF_QUEST_EXIT))
-    {
-        if (quest[p_ptr->inside_quest].type == QUEST_TYPE_FIND_EXIT)
-        {
-            quest[p_ptr->inside_quest].status = QUEST_STATUS_COMPLETED;
-            quest[p_ptr->inside_quest].complev = (byte)p_ptr->lev;
-            msg_print("You accomplished your quest!");
-            msg_print(NULL);
-        }
-
-        leave_quest_check();
-
-        p_ptr->inside_quest = c_ptr->special;
-        dun_level = 0;
-        p_ptr->oldpx = 0;
-        p_ptr->oldpy = 0;
-
-        p_ptr->leaving = TRUE;
     }
 
     /* Set off a trap */
@@ -5389,7 +5314,7 @@ void move_player(int dir, bool do_pickup, bool break_trap)
     m_ptr = &m_list[c_ptr->m_idx];
 
 
-    if (equip_find_artifact(ART_STORMBRINGER)) stormbringer = TRUE;
+    if (equip_find_art(ART_STORMBRINGER)) stormbringer = TRUE;
 
     /* Player can not walk through "walls"... */
     /* unless in Shadow Form */
@@ -5669,7 +5594,7 @@ void move_player(int dir, bool do_pickup, bool break_trap)
                 msg_format("You feel %s %s blocking your way.",
                     is_a_vowel(name[0]) ? "an" : "a", name);
 
-                c_ptr->info |= (CAVE_MARK);
+                c_ptr->info |= (CAVE_MARK | CAVE_AWARE);
                 lite_spot(y, x);
             }
         }
@@ -5694,7 +5619,7 @@ void move_player(int dir, bool do_pickup, bool break_trap)
             {
 #ifdef ALLOW_EASY_OPEN
                 /* Closed doors */
-                if (easy_open && is_closed_door(feat) && easy_open_door(y, x))
+                if (easy_open && is_closed_door(feat) && easy_open_door(y, x, dir))
                 {
                     /* Hack. Try to deduce what happened since easy_open_door hides this.
                        Try to repeat attempting to unlock the door, but do a quick check
@@ -6274,7 +6199,7 @@ static bool run_test(void)
 
                 /* Deep water */
                 else if (have_flag(f_ptr->flags, FF_WATER) && have_flag(f_ptr->flags, FF_DEEP) &&
-                         (p_ptr->levitation || p_ptr->can_swim || (p_ptr->total_weight <= weight_limit())))
+                         (p_ptr->levitation || p_ptr->can_swim || (py_total_weight() <= weight_limit())))
                 {
                     /* Ignore */
                     notice = FALSE;
@@ -6631,17 +6556,20 @@ static bool travel_abort(void)
     return FALSE;
 }
 
+static int travel_cost(point_t pt)
+{
+    return travel.cost[pt.y][pt.x];
+}
 
-/*
- * Travel command
- */
 void travel_step(void)
 {
     int i;
-    int dir = travel.dir;
+    int dir = 0;
     int old_run = travel.run;
+    int dirs[8] = { 2, 4, 6, 8, 1, 7, 9, 3 };
+    point_t pt_best = {0};
 
-    find_prevdir = dir;
+    find_prevdir = travel.dir;
 
     if (travel_abort())
     {
@@ -6653,25 +6581,27 @@ void travel_step(void)
 
     energy_use = 100;
 
-    for (i = 1; i <= 9; i++)
+    for (i = 0; i < 8; i++)
     {
-        if (i == 5) continue;
+        int     d = dirs[i];
+        point_t pt = point(px + ddx[d], py + ddy[d]);
 
-        if (travel.cost[py+ddy[i]][px+ddx[i]] < travel.cost[py+ddy[dir]][px+ddx[dir]])
+        if (!dir || travel_cost(pt) < travel_cost(pt_best))
         {
-            dir = i;
+            dir = d;
+            pt_best = pt;
         }
     }
 
     /* Travelling is bumping into jammed doors and getting stuck */
-    if (is_jammed_door(cave[py+ddy[dir]][px+ddx[dir]].feat))
+    if (is_jammed_door(cave[pt_best.y][pt_best.x].feat))
     {
         disturb(0, 0);
         return;
     }
 
     /* Closed door */
-    else if (is_closed_door(cave[py+ddy[dir]][px+ddx[dir]].feat))
+    else if (is_closed_door(cave[pt_best.y][pt_best.x].feat))
     {
         if (!easy_open)
         {
@@ -6680,7 +6610,7 @@ void travel_step(void)
         }
     }
     /* Travelling is bumping into mountains and permanent walls and getting stuck */
-    else if (!player_can_enter(cave[py+ddy[dir]][px+ddx[dir]].feat, 0))
+    else if (!player_can_enter(cave[pt_best.y][pt_best.x].feat, 0))
     {
         disturb(0, 0);
         return;
@@ -6693,7 +6623,11 @@ void travel_step(void)
     travel.run = old_run;
 
     if ((py == travel.y) && (px == travel.x))
-        travel.run = 0;
+    {
+        travel_end();
+    }
     else
         travel.run--;
 }
+
+

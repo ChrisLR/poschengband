@@ -1,0 +1,48 @@
+# Haunted House, (C) Topi Ylinen 1999
+# updated by clouded
+# I added a Dread to make it more challenging
+
+?:[EQU $QUEST25 Taken InProgress]
+D:There is something evil going on in the old, thatched house
+D:near the south-west corner of the city wall. People say that
+D:the house is haunted and refuse to go near it. We need someone
+D:to exorcise the evil spirits that are infesting the house.
+?:[EQU $QUEST25 Completed]
+D:Well done, indeed! Our citizens can finally sigh in relief.
+?:[EQU $QUEST25 Failed]
+D:Bah, what a loser!
+D:Fortunately, a bunch of pilgrims who were passing by turned
+D:out to be ultra-elite paladins on their pilgrimage to the
+D:holy city, and -- as a spiritual exercise -- the cleaned up
+D:the house without even asking for a reward. Maybe you should
+D:try to find them: you could learn a thing or two!
+?:1
+
+T:QUEST:NORMAL
+L:X:PERMANENT
+L:#:GRANITE
+L:+:CLOSED_DOOR
+L:.:FLOOR
+L:<:UP_STAIR
+L:M:MON(moaning spirit)
+L:B:MON(banshee)
+L:G:MON(^ghost$)
+L:S:MON(spectre)
+L:D:MON(^dread$)
+M:XXXXXXXXXXXXXXXXXXXX
+M:X##################X
+M:X#......#B.......G#X
+M:X#.####.###.....###X
+M:X#.#M.#.#B.......B#X
+M:X#.#..+.#####+#####X
+M:X#+####.........###X
+M:X#..###.........#D#X
+M:X#..###+####+####+#X
+M:X#..#.....#...#...#X
+M:X#..#.M.M.#.G.+.S.#X
+M:X#<.#.....#...#...#X
+M:X##################X
+M:XXXXXXXXXXXXXXXXXXXX
+R:OBJ(RING):EGO(combat)
+
+# vim: filetype=q :

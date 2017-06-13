@@ -17,7 +17,7 @@ void cause_wounds_I_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         fire_ball_hide(GF_CAUSE_1, dir, spell_power(damroll(3, 8) + p_ptr->to_d_spell), 0);
         var_set_bool(res, TRUE);
         break;
@@ -45,7 +45,7 @@ void cause_wounds_II_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         fire_ball_hide(GF_CAUSE_2, dir, spell_power(damroll(8, 8) + p_ptr->to_d_spell), 0);
         var_set_bool(res, TRUE);
         break;
@@ -73,7 +73,7 @@ void cause_wounds_III_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         fire_ball_hide(GF_CAUSE_3, dir, spell_power(damroll(10, 15) + p_ptr->to_d_spell), 0);
         var_set_bool(res, TRUE);
         break;
@@ -101,7 +101,7 @@ void cause_wounds_IV_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         fire_ball_hide(GF_CAUSE_4, dir, spell_power(damroll(15, 15) + p_ptr->to_d_spell), 0);
         var_set_bool(res, TRUE);
         break;
@@ -168,8 +168,7 @@ void clear_mind_spell(int cmd, variant *res)
             return;
         }
 
-        if (disturb_minor)
-            msg_print("You feel your head clear a little.");
+        msg_print("You feel your head clear a little.");
 
         if (p_ptr->pclass == CLASS_PSION) /* Testing ... */
             amt = 3 + p_ptr->lev/10;
@@ -202,7 +201,7 @@ void confuse_spell(int cmd, variant *res)
         if (p_ptr->lev < 40)
         {
             int dir = 0;
-            if (!get_aim_dir(&dir)) return;
+            if (!get_fire_dir(&dir)) return;
             confuse_monster(dir, p_ptr->lev*2);
         }
         else
@@ -305,53 +304,55 @@ void crafting_spell(int cmd, variant *res)
         break;
     case SPELL_CAST:
     {
-        int          item;
+        obj_prompt_t prompt = {0};
         bool         okay = FALSE;
-        object_type *o_ptr;
         char         o_name[MAX_NLEN];
 
         var_set_bool(res, FALSE);
 
-        item_tester_hook = object_is_weapon_armour_ammo;
-        item_tester_no_ryoute = TRUE;
+        prompt.prompt = "Enchant which item?";
+        prompt.error = "You have nothing to enchant.";
+        prompt.filter = object_is_weapon_armour_ammo;
+        prompt.where[0] = INV_PACK;
+        prompt.where[1] = INV_EQUIP;
+        prompt.where[2] = INV_QUIVER;
+        prompt.where[3] = INV_FLOOR;
 
-        if (!get_item(&item, "Enchant which item? ", "You have nothing to enchant.", (USE_EQUIP | USE_INVEN)))
-            return;
+        obj_prompt(&prompt);
+        if (!prompt.obj) return;
 
-        o_ptr = &inventory[item];
-        object_desc(o_name, o_ptr, (OD_OMIT_PREFIX | OD_NAME_ONLY));
+        object_desc(o_name, prompt.obj, (OD_OMIT_PREFIX | OD_NAME_ONLY));
 
-        if (object_is_nameless(o_ptr))
+        if (object_is_nameless(prompt.obj))
         {
-            if (object_is_ammo(o_ptr) && randint1(30) > (o_ptr->number - 30))
+            if (object_is_ammo(prompt.obj) && randint1(30) > (prompt.obj->number - 30))
             {
-                if (brand_weapon_aux(item))
+                if (brand_weapon_aux(prompt.obj))
                 {
-                    o_ptr->discount = 99;
+                    prompt.obj->discount = 99;
                     okay = TRUE;
                 }
             }
-            else if (object_is_weapon(o_ptr) && o_ptr->number == 1)
+            else if (object_is_weapon(prompt.obj) && prompt.obj->number == 1)
             {
-                if (brand_weapon_aux(item))
+                if (brand_weapon_aux(prompt.obj))
                 {
-                    o_ptr->discount = 99;
+                    prompt.obj->discount = 99;
                     okay = TRUE;
                 }
             }
-            else if (object_is_armour(o_ptr) && o_ptr->number == 1)
+            else if (object_is_armour(prompt.obj) && prompt.obj->number == 1)
             {
-                if (brand_armour_aux(item))
+                if (brand_armour_aux(prompt.obj))
                 {
-                    o_ptr->discount = 99;
+                    prompt.obj->discount = 99;
                     okay = TRUE;
                 }
             }
         }
 
-        msg_format("%s %s glow%s brightly!",
-                ((item >= 0) ? "Your" : "The"), o_name,
-                ((o_ptr->number > 1) ? "" : "s"));
+        msg_format("The %s glow%s brightly!", o_name,
+                ((prompt.obj->number > 1) ? "" : "s"));
 
         if (!okay)
         {
@@ -362,10 +363,9 @@ void crafting_spell(int cmd, variant *res)
         else
         {
             virtue_add(VIRTUE_ENCHANTMENT, 1);
-            android_calc_exp();
-
-            obj_identify_fully(o_ptr);
-            obj_display(o_ptr);
+            obj_identify_fully(prompt.obj);
+            obj_display(prompt.obj);
+            obj_release(prompt.obj, OBJ_RELEASE_ENCHANT);
         }
         var_set_bool(res, TRUE);
         break;
@@ -679,7 +679,7 @@ void darkness_storm_I_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         msg_print("You invoke a darkness storm.");
         fire_ball(
             GF_DARK,
@@ -718,7 +718,7 @@ void darkness_storm_II_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         msg_print("You invoke a darkness storm.");
         fire_ball(GF_DARK, dir,
             spell_power(_darkness_storm_II_dam() + p_ptr->to_d_spell),
@@ -846,7 +846,7 @@ void demon_breath_spell(int cmd, variant *res)
         int type = (one_in_(2) ? GF_NETHER : GF_FIRE);
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
 
         stop_mouth();
 
@@ -886,6 +886,12 @@ void destruction_spell(int cmd, variant *res)
 }
 bool cast_destruction(void) { return cast_spell(destruction_spell); }
 
+static void _detect_curses(obj_ptr obj)
+{
+    if (object_is_cursed(obj))
+        obj->feeling = FEEL_CURSED;
+}
+
 void detect_curses_spell(int cmd, variant *res)
 {
     switch (cmd)
@@ -907,17 +913,9 @@ void detect_curses_spell(int cmd, variant *res)
         break;
     case SPELL_CAST:
     {
-        int i;
-
-        for (i = 0; i < INVEN_TOTAL; i++)
-        {
-            object_type *o_ptr = &inventory[i];
-
-            if (!o_ptr->k_idx) continue;
-            if (!object_is_cursed(o_ptr)) continue;
-
-            o_ptr->feeling = FEEL_CURSED;
-        }
+        pack_for_each(_detect_curses);
+        equip_for_each(_detect_curses);
+        quiver_for_each(_detect_curses);
         var_set_bool(res, TRUE);
         break;
     }
@@ -1152,7 +1150,7 @@ void disintegrate_spell(int cmd, variant *res)
 
         var_set_bool(res, FALSE);
 
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         fire_ball(GF_DISINTEGRATE, dir, dam, rad);
 
         var_set_bool(res, TRUE);
@@ -1283,7 +1281,7 @@ void dominate_living_I_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         fire_ball_hide(GF_CONTROL_LIVING, dir, p_ptr->lev, 0);
         var_set_bool(res, TRUE);
         break;
@@ -1337,7 +1335,7 @@ void drain_mana_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         fire_ball_hide(GF_DRAIN_MANA, dir, spell_power(randint1(p_ptr->lev*3)+p_ptr->lev), 0);
         var_set_bool(res, TRUE);
         break;
@@ -1399,7 +1397,7 @@ void eat_magic_spell(int cmd, variant *res)
         break;
     case SPELL_CAST:
         var_set_bool(res, FALSE);
-        if (eat_magic(p_ptr->lev * 2))
+        if (eat_magic(20 + p_ptr->lev * 8 / 5)) /* skillmasters can do this on CL1 ... */
             var_set_bool(res, TRUE);
         break;
     case SPELL_FAIL_MIN:
@@ -1504,12 +1502,6 @@ void eat_rock_spell(int cmd, variant *res)
                 set_food(p_ptr->food + 10000);
             }
         }
-        if (p_ptr->fasting)
-        {
-            msg_print("You break your fast.");
-            p_ptr->redraw |= PR_STATUS;
-            p_ptr->fasting = FALSE;
-        }
 
         /* Destroy the wall */
         cave_alter_feat(y, x, FF_HURT_ROCK);
@@ -1577,63 +1569,8 @@ void minor_enchantment_spell(int cmd, variant *res)
         var_set_string(res, "Attempts to enchant a weapon, ammo or armor.");
         break;
     case SPELL_CAST:
-    {
-        int         item;
-        bool        okay = FALSE;
-        object_type *o_ptr;
-        char        o_name[MAX_NLEN];
-
-        var_set_bool(res, FALSE);
-
-        item_tester_hook = object_is_weapon_armour_ammo;
-        item_tester_no_ryoute = TRUE;
-
-        if (!get_item(&item, "Enchant which item? ", "You have nothing to enchant.", (USE_EQUIP | USE_INVEN | USE_FLOOR))) return;
-
-        if (item >= 0)
-            o_ptr = &inventory[item];
-        else
-            o_ptr = &o_list[0 - item];
-
-        object_desc(o_name, o_ptr, (OD_OMIT_PREFIX | OD_NAME_ONLY));
-
-        if (object_is_weapon_ammo(o_ptr))
-        {
-            if (one_in_(2))
-            {
-                if (enchant(o_ptr, 1, ENCH_TOHIT | ENCH_MINOR_HACK)) okay = TRUE;
-            }
-            else
-            {
-                if (enchant(o_ptr, 1, ENCH_TODAM | ENCH_MINOR_HACK)) okay = TRUE;
-            }
-        }
-        else
-        {
-            if (enchant(o_ptr, 1, ENCH_TOAC | ENCH_MINOR_HACK)) okay = TRUE;
-        }
-
-
-        msg_format("%s %s glow%s brightly!",
-               ((item >= 0) ? "Your" : "The"), o_name,
-               ((o_ptr->number > 1) ? "" : "s"));
-
-        if (!okay)
-        {
-            if (flush_failure) flush();
-            msg_print("The enchantment failed.");
-            if (one_in_(3) && virtue_current(VIRTUE_ENCHANTMENT) < 100)
-                virtue_add(VIRTUE_ENCHANTMENT, -1);
-        }
-        else
-        {
-            o_ptr->discount = 99;
-            virtue_add(VIRTUE_ENCHANTMENT, 1);
-        }
-        android_calc_exp();
-        var_set_bool(res, TRUE);
+        var_set_bool(res, craft_enchant(2 + p_ptr->lev/5, 1));
         break;
-    }
     default:
         default_spell(cmd, res);
         break;
@@ -1651,55 +1588,8 @@ void enchantment_spell(int cmd, variant *res)
         var_set_string(res, "Attempts to enchant a weapon, ammo or armor.");
         break;
     case SPELL_CAST:
-    {
-        int         item;
-        bool        okay = FALSE;
-        object_type *o_ptr;
-        char        o_name[MAX_NLEN];
-
-        var_set_bool(res, FALSE);
-
-        item_tester_hook = object_is_weapon_armour_ammo;
-        item_tester_no_ryoute = TRUE;
-
-        if (!get_item(&item, "Enchant which item? ", "You have nothing to enchant.", (USE_EQUIP | USE_INVEN | USE_FLOOR))) return;
-
-        if (item >= 0)
-            o_ptr = &inventory[item];
-        else
-            o_ptr = &o_list[0 - item];
-
-        object_desc(o_name, o_ptr, (OD_OMIT_PREFIX | OD_NAME_ONLY));
-
-        if (object_is_weapon_ammo(o_ptr))
-        {
-            if (enchant(o_ptr, randint0(4) + 1, ENCH_TOHIT)) okay = TRUE;
-            if (enchant(o_ptr, randint0(4) + 1, ENCH_TODAM)) okay = TRUE;
-        }
-        else
-        {
-            if (enchant(o_ptr, randint0(3) + 2, ENCH_TOAC)) okay = TRUE;
-        }
-
-
-        msg_format("%s %s glow%s brightly!",
-               ((item >= 0) ? "Your" : "The"), o_name,
-               ((o_ptr->number > 1) ? "" : "s"));
-
-        if (!okay)
-        {
-            if (flush_failure) flush();
-            msg_print("The enchantment failed.");
-            if (one_in_(3) && virtue_current(VIRTUE_ENCHANTMENT) < 100)
-                virtue_add(VIRTUE_ENCHANTMENT, -1);
-        }
-        else
-            virtue_add(VIRTUE_ENCHANTMENT, 1);
-
-        android_calc_exp();
-        var_set_bool(res, TRUE);
+        var_set_bool(res, craft_enchant(15, 3));
         break;
-    }
     default:
         default_spell(cmd, res);
         break;
@@ -1726,7 +1616,7 @@ void enslave_undead_spell(int cmd, variant *res)
             power = spell_power(p_ptr->lev);
 
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         control_one_undead(dir, power);
         var_set_bool(res, TRUE);
         break;
@@ -1795,7 +1685,7 @@ void fire_ball_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         fire_ball(
             GF_FIRE,
             dir,
@@ -1831,7 +1721,7 @@ void fire_bolt_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         fire_bolt_or_beam(
             beam_chance(),
             GF_FIRE,
@@ -1911,7 +1801,7 @@ void frost_ball_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         fire_ball(GF_COLD, dir, spell_power(3*p_ptr->lev/2 + 25 + p_ptr->to_d_spell), 2);
         var_set_bool(res, TRUE);
         break;
@@ -1942,7 +1832,7 @@ void frost_bolt_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         fire_bolt_or_beam(
             beam_chance(),
             GF_COLD,

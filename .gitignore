@@ -108,6 +108,8 @@ ipch/
 *.opensdf
 *.sdf
 *.cachefile
+*.vc.db
+*.vc.opendb
 
 # Visual Studio profiler
 *.psess
@@ -241,6 +243,7 @@ pip-log.txt
 *.o
 /src/poschengband
 /poschengband
+/src/tags
 
 # Temporary (cache) files built during run-time
 *.raw
@@ -256,5 +259,4 @@ aclocal.m4
 autom4te.cache/
 config.log
 config.status
-configure
 mk/buildsys.mk

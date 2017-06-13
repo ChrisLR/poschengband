@@ -261,7 +261,7 @@ static void _sniping_spell(int cmd, variant *res)
         break;
     case SPELL_CAST:
         var_set_bool(res, FALSE);
-        if (!equip_find_object(TV_BOW, SV_ANY))
+        if (!equip_find_obj(TV_BOW, SV_ANY))
         {
             msg_print("You need a bow to use this talent.");
             break;
@@ -460,16 +460,6 @@ static void _calc_bonuses(void)
 static void _get_flags(u32b flgs[OF_ARRAY_SIZE])
 {
 }
-static void _calc_shooter_bonuses(object_type *o_ptr, shooter_info_t *info_ptr)
-{
-    if ( !p_ptr->shooter_info.heavy_shoot
-      && !heavy_armor()
-      && p_ptr->shooter_info.tval_ammo <= TV_BOLT
-      && p_ptr->shooter_info.tval_ammo >= TV_SHOT )
-    {
-        p_ptr->shooter_info.num_fire += p_ptr->lev * 150 / 50;
-    }
-}
 
 static void _character_dump(doc_ptr doc)
 {
@@ -540,7 +530,9 @@ static caster_info * _caster_info(void)
     {
         me.magic_desc = "technique";
         me.which_stat = A_WIS;
-        me.weight = 350;
+        me.encumbrance.max_wgt = 350;
+        me.encumbrance.weapon_pct = 50;
+        me.encumbrance.enc_wgt = 800;
         init = TRUE;
     }
     return &me;
@@ -551,6 +543,14 @@ static void _move_player(void)
     p_ptr->update |= PU_BONUS;
 }
 
+static void _birth(void)
+{
+    py_birth_obj_aux(TV_SWORD, SV_DAGGER, 1);
+    py_birth_obj_aux(TV_SOFT_ARMOR, SV_SOFT_LEATHER_ARMOR, 1);
+    py_birth_obj_aux(TV_BOW, SV_SHORT_BOW, 1);
+    py_birth_obj_aux(TV_ARROW, SV_ARROW, rand_range(20, 30));
+}
+
 class_t *scout_get_class(void)
 {
     static class_t me = {0};
@@ -559,8 +559,8 @@ class_t *scout_get_class(void)
     /* static info never changes */
     if (!init)
     {           /* dis, dev, sav, stl, srh, fos, thn, thb */
-    skills_t bs = { 30,  33,  34,   6,  50,  24,  50,  50 };
-    skills_t xs = { 15,  11,  10,   0,   0,   0,  20,  20 };
+    skills_t bs = { 30,  33,  34,   6,  50,  24,  50,  65 };
+    skills_t xs = { 15,  11,  10,   0,   0,   0,  20,  25 };
 
         me.name = "Scout";
         me.desc = "The scout is the vanguard of any attack, and excels at stealth and observation "
@@ -582,10 +582,12 @@ class_t *scout_get_class(void)
         me.base_hp = 8;
         me.exp = 130;
         me.pets = 40;
+        me.flags = CLASS_SENSE1_FAST | CLASS_SENSE1_STRONG |
+                   CLASS_SENSE2_MED | CLASS_SENSE2_STRONG;
 
+        me.birth = _birth;
         me.calc_bonuses = _calc_bonuses;
         me.get_flags = _get_flags;
-        me.calc_shooter_bonuses = _calc_shooter_bonuses;
         me.caster_info = _caster_info;
         me.get_spells = _get_spells;
         me.move_player = _move_player;

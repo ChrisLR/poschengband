@@ -47,12 +47,25 @@ static caster_info * _caster_info(void)
     {
         me.magic_desc = "spell";
         me.which_stat = A_INT;
-        me.weight = 430;
+        me.encumbrance.max_wgt = 430;
+        me.encumbrance.weapon_pct = 33;
+        me.encumbrance.enc_wgt = 1000;
         me.min_fail = 5;
         me.options = CASTER_GLOVE_ENCUMBRANCE;
         init = TRUE;
     }
     return &me;
+}
+
+static void _birth(void)
+{
+    int i;
+    for (i = 0; i < 64; i++)
+        p_ptr->spell_exp[i] = SPELL_EXP_EXPERT;
+
+    py_birth_obj_aux(TV_SWORD, SV_SHORT_SWORD, 1);
+    py_birth_obj_aux(TV_SOFT_ARMOR, SV_HARD_LEATHER_ARMOR, 1);
+    py_birth_obj_aux(TV_ARCANE_BOOK, 0, 1);
 }
 
 class_t *red_mage_get_class(void)
@@ -95,7 +108,10 @@ class_t *red_mage_get_class(void)
         me.base_hp = 8;
         me.exp = 140;
         me.pets = 40;
+        me.flags = CLASS_SENSE1_SLOW | CLASS_SENSE1_WEAK |
+                   CLASS_SENSE2_SLOW | CLASS_SENSE2_STRONG;
         
+        me.birth = _birth;
         me.caster_info = _caster_info;
         /* TODO: This class uses spell books, so we are SOL
         me.get_spells = _get_spells;*/

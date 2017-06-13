@@ -14,7 +14,7 @@ static void _take_photo_spell(int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, TRUE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         project_length = 1;
         fire_beam(GF_PHOTO, dir, 1);
         var_set_bool(res, TRUE);
@@ -53,13 +53,29 @@ static caster_info * _caster_info(void)
     {
         me.magic_desc = "spell";
         me.which_stat = A_INT;
-        me.weight = 450;
+        me.encumbrance.max_wgt = 450;
+        me.encumbrance.weapon_pct = 67;
+        me.encumbrance.enc_wgt = 800;
         me.min_fail = 5;
         me.min_level = 5;
         me.options = CASTER_GLOVE_ENCUMBRANCE;
         init = TRUE;
     }
     return &me;
+}
+
+static void _birth(void)
+{
+    py_birth_obj_aux(TV_FOOD, SV_FOOD_BISCUIT, rand_range(2, 4));
+    py_birth_obj_aux(TV_FOOD, SV_FOOD_WAYBREAD, rand_range(2, 4));
+    py_birth_obj_aux(TV_FOOD, SV_FOOD_JERKY, rand_range(1, 3));
+    py_birth_obj_aux(TV_FOOD, SV_FOOD_PINT_OF_ALE, rand_range(2, 4));
+    py_birth_obj_aux(TV_FOOD, SV_FOOD_PINT_OF_WINE, rand_range(2, 4));
+    py_birth_obj_aux(TV_FOOD, SV_FOOD_BISCUIT, rand_range(2, 4));
+    py_birth_obj_aux(TV_SCROLL, SV_SCROLL_MAPPING, rand_range(2, 5));
+    py_birth_obj_aux(TV_BOW, SV_SLING, 1);
+    py_birth_obj_aux(TV_SHOT, SV_PEBBLE, rand_range(20, 40));
+    p_ptr->au += 2000;
 }
 
 class_t *tourist_get_class(void)
@@ -95,7 +111,10 @@ class_t *tourist_get_class(void)
         me.base_hp = 0;
         me.exp = 70;
         me.pets = 40;
-        
+        me.flags = CLASS_SENSE1_FAST | CLASS_SENSE1_STRONG |
+                   CLASS_SENSE2_FAST | CLASS_SENSE2_STRONG;
+
+        me.birth = _birth;
         me.caster_info = _caster_info;
         /* TODO: This class uses spell books, so we are SOL
         me.get_spells = _get_spells;*/

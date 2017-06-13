@@ -1,5 +1,7 @@
 #include "angband.h"
 
+#include <assert.h>
+
 /****************************************************************
  * Combat
  ****************************************************************/
@@ -31,7 +33,7 @@ static personality_ptr _get_combat_personality(void)
         me.skills.srh = -1;
         me.skills.fos =  2;
         me.skills.thn =  5;
-        me.skills.thb =  5;
+        me.skills.thb =  3;
 
         me.life = 100;
         me.exp = 100;
@@ -71,7 +73,7 @@ static personality_ptr _get_craven_personality(void)
         me.skills.srh =  0;
         me.skills.fos =  0;
         me.skills.thn =-10;
-        me.skills.thb = 10;
+        me.skills.thb =  7;
 
         me.life = 99;
         me.exp = 100;
@@ -170,7 +172,7 @@ static personality_ptr _get_hasty_personality(void)
         me.skills.srh = -4;
         me.skills.fos = -2;
         me.skills.thn = -5;
-        me.skills.thb = -5;
+        me.skills.thb = -3;
 
         me.life = 100;
         me.exp = 100;
@@ -186,6 +188,10 @@ static personality_ptr _get_hasty_personality(void)
 /****************************************************************
  * Lazy
  ****************************************************************/
+static void _lazy_birth(void)
+{
+    p_ptr->au /= 2;
+}
 static void _lazy_calc_bonuses(void)
 {
     p_ptr->to_m_chance += 10;
@@ -215,11 +221,12 @@ static personality_ptr _get_lazy_personality(void)
         me.skills.srh = -4;
         me.skills.fos = -2;
         me.skills.thn = -8;
-        me.skills.thb = -8;
+        me.skills.thb = -5;
 
         me.life = 95;
         me.exp = 100;
 
+        me.birth = _lazy_birth;
         me.calc_bonuses = _lazy_calc_bonuses;
 
         init = TRUE;
@@ -243,9 +250,9 @@ static personality_ptr _get_lucky_personality(void)
     if (!init)
     {
         me.name = "Lucky";
-        me.desc = "A Lucky man has poor stats, equivalent to a Lazy person. "
-                    "Mysteriously, however, he can do all things well. Only "
-                    "males can choose this personality.";
+        me.desc = "A Lucky person has poor stats but, surprisingly, can do all "
+                    "things well. For some reason, good things seem to happen "
+                    "more often to lucky players.";
 
         me.stats[A_STR] = -2;
         me.stats[A_INT] = -2;
@@ -261,13 +268,12 @@ static personality_ptr _get_lucky_personality(void)
         me.skills.srh = 10;
         me.skills.fos =  8;
         me.skills.thn = 15;
-        me.skills.thb = 15;
+        me.skills.thb =  9;
 
-        me.life = 100;
+        me.life = 98;
         me.exp = 100;
 
         me.birth = _lucky_birth;
-        me.flags = PERSONALITY_IS_MALE;
 
         init = TRUE;
     }
@@ -307,7 +313,7 @@ static personality_ptr _get_mighty_personality(void)
         me.skills.stl = -1;
         me.skills.srh = -2;
         me.skills.fos = -2;
-        me.skills.thn = 10;
+        me.skills.thn = 15;
         me.skills.thb =  0;
 
         me.life = 102;
@@ -323,8 +329,14 @@ static personality_ptr _get_mighty_personality(void)
 /****************************************************************
  * Munchkin
  ****************************************************************/
+static void _munchkin_birth(void)
+{
+    p_ptr->au = 10 * 1000 * 1000;
+}
+
 static void _munchkin_calc_bonuses(void)
 {
+    p_ptr->auto_id = TRUE;
     res_add(RES_BLIND);
     res_add(RES_CONF);
     p_ptr->hold_life = TRUE;
@@ -368,11 +380,13 @@ static personality_ptr _get_munchkin_personality(void)
         me.skills.srh = 20;
         me.skills.fos = 20;
         me.skills.thn = 40;
-        me.skills.thb = 40;
+        me.skills.thb = 24;
 
         me.life = 150;
         me.exp = 50;
+        me.flags = DEPRECATED;
 
+        me.birth = _munchkin_birth;
         me.calc_bonuses = _munchkin_calc_bonuses;
         me.get_flags = _munchkin_get_flags;
 
@@ -409,7 +423,7 @@ static personality_ptr _get_nimble_personality(void)
         me.skills.srh =  5;
         me.skills.fos =  5;
         me.skills.thn =  0;
-        me.skills.thb = 10;
+        me.skills.thb =  7;
 
         me.life = 99;
         me.exp = 100;
@@ -474,7 +488,7 @@ static personality_ptr _get_patient_personality(void)
         me.skills.srh =  0;
         me.skills.fos = -3;
         me.skills.thn = -6;
-        me.skills.thb = -6;
+        me.skills.thb = -3;
 
         me.life = 102;
         me.exp = 100;
@@ -514,7 +528,7 @@ static personality_ptr _get_pious_personality(void)
         me.skills.srh =  3;
         me.skills.fos = -2;
         me.skills.thn = -3;
-        me.skills.thb = -6;
+        me.skills.thb = -3;
 
         me.life = 100;
         me.exp = 100;
@@ -529,14 +543,15 @@ static personality_ptr _get_pious_personality(void)
  ****************************************************************/
 static void _sexy_birth(void)
 {
-    object_type forge = {0};
-    object_prep(&forge, lookup_kind(TV_HAFTED, SV_WHIP));
-    if (p_ptr->pclass == CLASS_RUNE_KNIGHT)
-        rune_add(&forge, RUNE_ABSORPTION, FALSE);
-    add_outfit(&forge);
-
-    /* skills_on_birth() is doing this already ...
-    s_info[p_ptr->pclass].w_max[TV_HAFTED-TV_WEAPON_BEGIN][SV_WHIP] = WEAPON_EXP_MASTER; */
+    if ( p_ptr->prace != RACE_MON_SWORD
+      && !demon_is_(DEMON_BALROG) )
+    {
+        object_type forge = {0};
+        object_prep(&forge, lookup_kind(TV_HAFTED, SV_WHIP));
+        if (p_ptr->pclass == CLASS_RUNE_KNIGHT)
+            rune_add(&forge, RUNE_ABSORPTION, FALSE);
+        py_birth_obj(&forge);
+    }
 }
 static void _sexy_calc_bonuses(void)
 {
@@ -554,9 +569,8 @@ static personality_ptr _get_sexy_personality(void)
     if (!init)
     {
         me.name = "Sexy";
-        me.desc = "Sexy rises all of your stats and skills, but your haughty "
-                    "attitude will aggravate all monsters. Only females can "
-                    "choose this personality.";
+        me.desc = "Sexy increases all of your stats and skills, but your haughty "
+                    "attitude will aggravate all monsters.";
 
         me.stats[A_STR] = 1;
         me.stats[A_INT] = 1;
@@ -572,11 +586,10 @@ static personality_ptr _get_sexy_personality(void)
         me.skills.srh =  4;
         me.skills.fos =  2;
         me.skills.thn = 10;
-        me.skills.thb = 10;
+        me.skills.thb =  7;
 
         me.life = 100;
         me.exp = 100;
-        me.flags = PERSONALITY_IS_FEMALE;
 
         me.calc_bonuses = _sexy_calc_bonuses;
         me.get_flags = _sexy_get_flags;
@@ -620,7 +633,7 @@ static personality_ptr _get_shrewd_personality(void)
         me.skills.srh = -2;
         me.skills.fos =  5;
         me.skills.thn = -8;
-        me.skills.thb = -5;
+        me.skills.thb = -3;
 
         me.life = 97;
         me.exp = 100;
@@ -637,38 +650,55 @@ static personality_ptr _get_shrewd_personality(void)
  ****************************************************************/
 personality_ptr get_personality_aux(int index)
 {
+    personality_ptr result = NULL;
     switch (index)
     {
     case PERS_COMBAT:
-        return _get_combat_personality();
+        result = _get_combat_personality();
+        break;
     case PERS_CRAVEN:
-        return _get_craven_personality();
+        result = _get_craven_personality();
+        break;
     case PERS_FEARLESS:
-        return _get_fearless_personality();
+        result = _get_fearless_personality();
+        break;
     case PERS_HASTY:
-        return _get_hasty_personality();
+        result = _get_hasty_personality();
+        break;
     case PERS_LAZY:
-        return _get_lazy_personality();
+        result = _get_lazy_personality();
+        break;
     case PERS_LUCKY:
-        return _get_lucky_personality();
+        result = _get_lucky_personality();
+        break;
     case PERS_MIGHTY:
-        return _get_mighty_personality();
+        result = _get_mighty_personality();
+        break;
     case PERS_MUNCHKIN:
-        return _get_munchkin_personality();
+        result = _get_munchkin_personality();
+        break;
     case PERS_NIMBLE:
-        return _get_nimble_personality();
+        result = _get_nimble_personality();
+        break;
     case PERS_ORDINARY:
-        return _get_odinary_personality();
+        result = _get_odinary_personality();
+        break;
     case PERS_PATIENT:
-        return _get_patient_personality();
+        result = _get_patient_personality();
+        break;
     case PERS_PIOUS:
-        return _get_pious_personality();
+        result = _get_pious_personality();
+        break;
     case PERS_SEXY:
-        return _get_sexy_personality();
+        result = _get_sexy_personality();
+        break;
     case PERS_SHREWD:
-        return _get_shrewd_personality();
+        result = _get_shrewd_personality();
+        break;
     }
-    return _get_odinary_personality();
+    assert(result);
+    result->id = index;
+    return result;
 }
 
 personality_ptr get_personality(void)

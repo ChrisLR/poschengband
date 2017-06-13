@@ -41,7 +41,7 @@ static void _bind_monster_spell(int cmd, variant *res)
     {
         int dir;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         stasis_monster(dir);
         var_set_bool(res, TRUE);
         break;
@@ -417,7 +417,7 @@ static void _smoke_ball_spell(int cmd, variant *res)
     {
         int dir;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         fire_ball(GF_OLD_CONF, dir, p_ptr->lev*3, 3);
         var_set_bool(res, TRUE);
         break;
@@ -427,6 +427,8 @@ static void _smoke_ball_spell(int cmd, variant *res)
         break;
     }
 }
+
+static bool _obj_is_shuriken(obj_ptr obj) { return obj->tval == TV_SPIKE; }
 
 static void _syuriken_spreading_spell(int cmd, variant *res)
 {
@@ -443,18 +445,17 @@ static void _syuriken_spreading_spell(int cmd, variant *res)
         int i;
         for (i = 0; i < 8; i++)
         {
-            int slot;
-            for (slot = 0; slot < INVEN_PACK; slot++)
-            {
-                if (inventory[slot].tval == TV_SPIKE) break;
-            }
-            if (slot == INVEN_PACK)
+            int        slot = pack_find_first(_obj_is_shuriken);
+            py_throw_t context = {0}; /* better reset for each shot! */
+            if (!slot)
             {
                 if (!i) msg_print("You have no Iron Spikes.");
                 else msg_print("You have no more Iron Spikes.");
                 break;
             }
-            do_cmd_throw_aux(1, FALSE, slot);
+            context.dir = DIR_RANDOM;
+            context.obj = pack_obj(slot);
+            py_throw(&context);
         }
         var_set_bool(res, TRUE);
         break;
@@ -525,7 +526,7 @@ static void _calc_bonuses(void)
         p_ptr->pspeed -= p_ptr->lev/10;
         p_ptr->skills.stl -= p_ptr->lev/10;
     }
-    else if (!equip_find_object(TV_SHIELD, SV_ANY))
+    else if (!equip_find_obj(TV_SHIELD, SV_ANY))
     {
         p_ptr->pspeed += 3;
         p_ptr->pspeed += p_ptr->lev/10;
@@ -533,7 +534,7 @@ static void _calc_bonuses(void)
         if (p_ptr->lev >= 25)
             p_ptr->free_act = TRUE;
     }
-    if (!equip_find_object(TV_SHIELD, SV_ANY))
+    if (!equip_find_obj(TV_SHIELD, SV_ANY))
     {
         p_ptr->to_a += p_ptr->lev/2 + 5;
         p_ptr->dis_to_a += p_ptr->lev/2 + 5;
@@ -553,7 +554,7 @@ static void _get_flags(u32b flgs[OF_ARRAY_SIZE])
         add_flag(flgs, OF_SPEED);
     else
     {
-        if (!equip_find_object(TV_SHIELD, SV_ANY))
+        if (!equip_find_obj(TV_SHIELD, SV_ANY))
         {
             add_flag(flgs, OF_SPEED);
         }
@@ -570,7 +571,7 @@ static void _get_flags(u32b flgs[OF_ARRAY_SIZE])
 static void _calc_weapon_bonuses(object_type *o_ptr, weapon_info_t *info_ptr)
 {
     if ( skills_weapon_is_icky(o_ptr->tval, o_ptr->sval) 
-      || equip_find_object(TV_SHIELD, SV_ANY) )
+      || equip_find_obj(TV_SHIELD, SV_ANY) )
     {
         info_ptr->to_h -= 40;
         info_ptr->dis_to_h -= 40;
@@ -590,10 +591,17 @@ static caster_info * _caster_info(void)
         me.magic_desc = "ninjutsu";
         me.options = CASTER_USE_HP;
         me.which_stat = A_DEX;
-        me.weight = 350;
         init = TRUE;
     }
     return &me;
+}
+
+static void _birth(void)
+{
+    py_birth_obj_aux(TV_SWORD, SV_DAGGER, 1);
+    py_birth_obj_aux(TV_SOFT_ARMOR, SV_SOFT_LEATHER_ARMOR, 1);
+    py_birth_obj_aux(TV_POTION, SV_POTION_SPEED, 1);
+    py_birth_obj_aux(TV_SPIKE, 0, rand_range(15, 20));
 }
 
 class_t *ninja_get_class(void)
@@ -635,7 +643,10 @@ class_t *ninja_get_class(void)
         me.base_hp = 4;
         me.exp = 120;
         me.pets = 40;
+        me.flags = CLASS_SENSE1_MED | CLASS_SENSE1_STRONG |
+                   CLASS_SENSE2_STRONG;
 
+        me.birth = _birth;
         me.calc_bonuses = _calc_bonuses;
         me.get_flags = _get_flags;
         me.calc_weapon_bonuses = _calc_weapon_bonuses;

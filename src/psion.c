@@ -57,7 +57,7 @@ bool psion_can_wield(object_type *o_ptr)
       && p_ptr->pclass == CLASS_PSION
       && psion_weapon_graft() )
     {
-        msg_print("Failed!  Your weapon is currently grafted to your arm!");
+        msg_print("Failed! Your weapon is currently grafted to your arm!");
         return FALSE;
     }
     return TRUE;
@@ -335,7 +335,7 @@ static void _brain_smash_spell(int power, int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
 
         fire_ball(
             GF_PSI_BRAIN_SMASH, 
@@ -416,7 +416,7 @@ static void _ego_whip_spell(int power, int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
 
         fire_ball(
             GF_PSI_EGO_WHIP, 
@@ -504,7 +504,7 @@ static void _energy_blast_spell(int power, int cmd, variant *res)
         var_set_bool(res, FALSE);
         
         if (type < 0) return;
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
 
         fire_ball_aux(
             type, 
@@ -585,7 +585,7 @@ static void _mana_thrust_spell(int power, int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
         fire_bolt(GF_MANA, dir, spell_power(damroll(4*power, 4*power)));
         var_set_bool(res, TRUE);
         break;
@@ -816,37 +816,41 @@ void _psionic_crafting_spell(int power, int cmd, variant *res)
         break;
     case SPELL_CAST:
     {
-        int         item;
-        bool        okay = FALSE;
-        object_type *o_ptr;
-        char        o_name[MAX_NLEN];
+        obj_prompt_t prompt = {0};
+        bool         okay = FALSE;
+        char         o_name[MAX_NLEN];
 
         var_set_bool(res, FALSE);
 
-        item_tester_hook = object_is_weapon_armour_ammo;
-        item_tester_no_ryoute = TRUE;
+        prompt.prompt = "Enchant which item?";
+        prompt.error = "You have nothing to enchant.";
+        prompt.filter = object_is_weapon_armour_ammo;
+        prompt.where[0] = INV_PACK;
+        prompt.where[1] = INV_EQUIP;
+        prompt.where[2] = INV_QUIVER;
+        prompt.where[3] = INV_FLOOR;
 
-        if (!get_item(&item, "Enchant which item? ", "You have nothing to enchant.", (USE_EQUIP | USE_INVEN))) return;
+        obj_prompt(&prompt);
+        if (!prompt.obj) return;
 
-        o_ptr = &inventory[item];
-        object_desc(o_name, o_ptr, (OD_OMIT_PREFIX | OD_NAME_ONLY));
+        object_desc(o_name, prompt.obj, (OD_OMIT_PREFIX | OD_NAME_ONLY));
 
         _enchant_power = power; /* Hack for enchant(), which I'm too lazy to rewrite ... */
-        if (power == 5 && object_is_nameless(o_ptr) && o_ptr->number == 1)
+        if (power == 5 && object_is_nameless(prompt.obj) && prompt.obj->number == 1)
         {
-            if (object_is_weapon(o_ptr))
+            if (object_is_weapon(prompt.obj))
             {
-                if (brand_weapon_aux(item))
+                if (brand_weapon_aux(prompt.obj))
                 {
-                    o_ptr->discount = 99;
+                    prompt.obj->discount = 99;
                     okay = TRUE;
                 }
             }
-            else if (object_is_armour(o_ptr))
+            else if (object_is_armour(prompt.obj))
             {
-                if (brand_armour_aux(item))
+                if (brand_armour_aux(prompt.obj))
                 {
-                    o_ptr->discount = 99;
+                    prompt.obj->discount = 99;
                     okay = TRUE;
                 }
             }
@@ -854,20 +858,19 @@ void _psionic_crafting_spell(int power, int cmd, variant *res)
 
         if (!okay)
         {
-            if (object_is_weapon_ammo(o_ptr))
+            if (object_is_weapon_ammo(prompt.obj))
             {
-                if (enchant(o_ptr, randint0(4) + 1, ENCH_TOHIT | ENCH_PSI_HACK)) okay = TRUE;
-                if (enchant(o_ptr, randint0(4) + 1, ENCH_TODAM | ENCH_PSI_HACK)) okay = TRUE;
+                if (enchant(prompt.obj, randint0(4) + 1, ENCH_TOHIT | ENCH_PSI_HACK)) okay = TRUE;
+                if (enchant(prompt.obj, randint0(4) + 1, ENCH_TODAM | ENCH_PSI_HACK)) okay = TRUE;
             }
             else
             {
-                if (enchant(o_ptr, randint0(3) + 2, ENCH_TOAC | ENCH_PSI_HACK)) okay = TRUE;            
+                if (enchant(prompt.obj, randint0(3) + 2, ENCH_TOAC | ENCH_PSI_HACK)) okay = TRUE;            
             }
         }
 
-        msg_format("%s %s glow%s brightly!",
-                ((item >= 0) ? "Your" : "The"), o_name,
-                ((o_ptr->number > 1) ? "" : "s"));
+        msg_format("The %s glow%s brightly!", o_name,
+                ((prompt.obj->number > 1) ? "" : "s"));
 
         if (!okay)
         {
@@ -1276,7 +1279,7 @@ static void _psionic_storm_spell(int power, int cmd, variant *res)
     {
         int dir = 0;
         var_set_bool(res, FALSE);
-        if (!get_aim_dir(&dir)) return;
+        if (!get_fire_dir(&dir)) return;
 
         fire_ball_aux(
             GF_PSI_STORM, 
@@ -1947,7 +1950,7 @@ static int _get_spells(spell_info* spells, int max)
 
 static void _calc_bonuses(void)
 {
-    if (equip_find_artifact(ART_STONE_OF_MIND))
+    if (equip_find_art(ART_STONE_OF_MIND))
     {
         p_ptr->dec_mana = TRUE;
         p_ptr->easy_spell = TRUE;
@@ -1983,12 +1986,15 @@ static void _calc_bonuses(void)
 
     if (p_ptr->magic_num1[_ARCHERY])
     {
+        /* Note: This also increases shots per round ... cf calc_bonuses in xtra1.c */
         p_ptr->skills.thb += 20*p_ptr->magic_num2[_ARCHERY];
     }
 
     if (p_ptr->magic_num1[_SPEED])
     {
-        if (!p_ptr->fast)
+        if (IS_FAST())
+            p_ptr->pspeed += MAX(4*p_ptr->magic_num2[_SPEED] - 10, 0);
+        else
             p_ptr->pspeed += 4*p_ptr->magic_num2[_SPEED];
     }
     if (p_ptr->magic_num1[_FORTRESS])
@@ -2041,14 +2047,6 @@ static void _calc_weapon_bonuses(object_type *o_ptr, weapon_info_t *info_ptr)
     if (p_ptr->magic_num1[_COMBAT])
     {
         info_ptr->xtra_blow += p_ptr->magic_num2[_COMBAT] * 50;
-    }
-}
-
-static void _calc_shooter_bonuses(object_type *o_ptr, shooter_info_t *info_ptr)
-{
-    if (p_ptr->magic_num1[_ARCHERY])
-    {
-        info_ptr->num_fire += p_ptr->magic_num2[_ARCHERY] * 25;
     }
 }
 
@@ -2124,7 +2122,9 @@ static caster_info * _caster_info(void)
     if (!init)
     {
         me.magic_desc = "focus";
-        me.weight = 400;
+        me.encumbrance.max_wgt = 400;
+        me.encumbrance.weapon_pct = 50;
+        me.encumbrance.enc_wgt = 800;
         init = TRUE;
     }
     me.which_stat = _spell_stat();
@@ -2195,6 +2195,13 @@ static void _player_action(int energy_use)
     psion_do_mindspring(energy_use);
 }
 
+static void _birth(void)
+{
+    py_birth_obj_aux(TV_SWORD, SV_SMALL_SWORD, 1);
+    py_birth_obj_aux(TV_SOFT_ARMOR, SV_SOFT_LEATHER_ARMOR, 1);
+    py_birth_obj_aux(TV_POTION, SV_POTION_CLARITY, rand_range(5, 10));
+}
+
 class_t *psion_get_class(void)
 {
     static class_t me = {0};
@@ -2230,11 +2237,13 @@ class_t *psion_get_class(void)
         me.base_hp = 4;
         me.exp = 150;
         me.pets = 35;
+        me.flags = CLASS_SENSE1_FAST | CLASS_SENSE1_WEAK |
+                   CLASS_SENSE2_MED | CLASS_SENSE2_STRONG;
 
+        me.birth = _birth;
         me.calc_bonuses = _calc_bonuses;
         me.get_flags = _get_flags;
         me.calc_weapon_bonuses = _calc_weapon_bonuses;
-        me.calc_shooter_bonuses = _calc_shooter_bonuses;
         me.caster_info = _caster_info;
         me.get_spells = _get_spells;
         me.get_powers = _get_powers;

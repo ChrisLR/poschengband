@@ -935,11 +935,7 @@ bool dispel_check(int m_idx)
         if (randint1(500) < get_race()->exp) return TRUE;
     }
 
-    if (p_ptr->tim_shrike) return TRUE;
-    if (p_ptr->tim_speed_essentia) return TRUE;
-
     /* Craft Munckin Checks :) */
-    if (p_ptr->tim_genji) return TRUE;
     if (p_ptr->tim_force) return TRUE;
     if (p_ptr->tim_enlarge_weapon) return TRUE;
     if (p_ptr->kabenuke) return TRUE;
@@ -1440,8 +1436,7 @@ bool make_attack_spell(int m_idx, bool ticked_off)
     bool direct;
     bool wall_scummer = FALSE;
 
-    bool in_no_magic_dungeon = (d_info[dungeon_type].flags1 & DF1_NO_MAGIC) && dun_level
-        && (!p_ptr->inside_quest || is_fixed_quest_idx(p_ptr->inside_quest));
+    bool in_no_magic_dungeon = py_in_dungeon() && (d_info[dungeon_type].flags1 & DF1_NO_MAGIC);
 
     bool can_use_lite_area = FALSE;
 
@@ -1460,7 +1455,11 @@ bool make_attack_spell(int m_idx, bool ticked_off)
     if (!is_aware(m_ptr)) return FALSE;
 
 
-    /* Sometimes forbid inate attacks (breaths) */
+    /* Sometimes forbid inate attacks (breaths)
+     * XXX This is really counter-intuitive for some monsters.
+     * For example, an orc that RF4_SHOOTs 1 in 15 actually only
+     * does so 0.72% of the time (expected 6%). Turning 1_IN_15
+     * into 1_IN_138.889 is rather weird ...*/
     if (randint0(100) >= (r_ptr->freq_spell * 2)) no_inate = TRUE;
 
     /* XXX XXX XXX Handle "track_target" option (?) */
@@ -1618,7 +1617,7 @@ bool make_attack_spell(int m_idx, bool ticked_off)
               && !cave[m_ptr->fy][m_ptr->fx].dist
               && !(cave[m_ptr->fy][m_ptr->fx].info & CAVE_ICKY)
               && !(cave[py][px].info & CAVE_ICKY)
-              && !p_ptr->inside_quest
+              && !quests_get_current()
               && dun_level
               && (r_ptr->flags1 & RF1_UNIQUE) )
             {
@@ -4118,15 +4117,15 @@ msg_format("They say 'The %d meets! We are the Ring-Ranger!'.", count);
     {
         /* Inate spell */
         if (thrown_spell < 32 * 4)
-            mon_lore_aux_4(r_ptr, 1 << (thrown_spell - 32 * 3));
+            mon_lore_aux_4(r_ptr, 1U << (thrown_spell - 32 * 3));
 
         /* Bolt or Ball */
         else if (thrown_spell < 32 * 5)
-            mon_lore_aux_5(r_ptr, 1 << (thrown_spell - 32 * 4));
+            mon_lore_aux_5(r_ptr, 1U << (thrown_spell - 32 * 4));
 
         /* Special spell */
         else if (thrown_spell < 32 * 6)
-            mon_lore_aux_6(r_ptr, 1 << (thrown_spell - 32 * 5));
+            mon_lore_aux_6(r_ptr, 1U << (thrown_spell - 32 * 5));
     }
 
 

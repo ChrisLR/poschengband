@@ -31,7 +31,9 @@ static caster_info * _caster_info(void)
     {
         me.magic_desc = "prayer";
         me.which_stat = A_WIS;
-        me.weight = 430;
+        me.encumbrance.max_wgt = 430;
+        me.encumbrance.weapon_pct = 67;
+        me.encumbrance.enc_wgt = 800;
         me.options = CASTER_ALLOW_DEC_MANA;
         init = TRUE;
     }
@@ -75,6 +77,14 @@ bool priest_is_evil(void)
     if (p_ptr->pclass == CLASS_PRIEST && is_evil_realm(p_ptr->realm1))
         return TRUE;
     return FALSE;
+}
+
+static void _birth(void)
+{
+    py_birth_obj_aux(TV_HAFTED, SV_MACE, 1);
+    py_birth_obj_aux(TV_SOFT_ARMOR, SV_ROBE, 1);
+    py_birth_obj_aux(TV_POTION, SV_POTION_HEALING, 1);
+    py_birth_spellbooks();
 }
 
 class_t *priest_get_class(void)
@@ -121,7 +131,10 @@ class_t *priest_get_class(void)
         me.base_hp = 4;
         me.exp = 120;
         me.pets = 35;
+        me.flags = CLASS_SENSE1_FAST | CLASS_SENSE1_WEAK |
+                   CLASS_SENSE2_MED | CLASS_SENSE2_STRONG;
 
+        me.birth = _birth;
         me.caster_info = _caster_info;
         /* TODO: This class uses spell books, so we are SOL
         me.get_spells = _get_spells;*/

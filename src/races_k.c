@@ -35,7 +35,7 @@ race_t *klackon_get_race(void)
         me.name = "Klackon";
         me.desc = "Klackons are bizarre semi-intelligent ant-like insectoid creatures. "
                     "They make great fighters, but their mental abilities are severely limited. "
-                    "Obedient and well-ordered, they can never be confused. They are also very "
+                    "Obedient and well-ordered, they are resistant to confusion. They are also very "
                     "nimble, and become faster as they advance levels. They are also very acidic, "
                     "inherently resisting acid, and capable of spitting acid at higher levels.";
 
@@ -47,13 +47,13 @@ race_t *klackon_get_race(void)
         me.stats[A_CHR] =  1;
 
         me.skills.dis = 10;
-        me.skills.dev = 5;
+        me.skills.dev = -3;
         me.skills.sav = 3;
         me.skills.stl = 0;
         me.skills.srh = -1;
         me.skills.fos = 10;
         me.skills.thn = 5;
-        me.skills.thb = 5;
+        me.skills.thb = 3;
 
         me.life = 105;
         me.base_hp = 23;
@@ -116,7 +116,7 @@ race_t *kobold_get_race(void)
         me.skills.srh =  1;
         me.skills.fos =  8;
         me.skills.thn = 10;
-        me.skills.thb = -8;
+        me.skills.thb =  3;
 
         me.life = 98;
         me.base_hp = 19;
@@ -164,7 +164,7 @@ race_t *kutar_get_race(void)
         me.name = "Kutar";
         me.desc = "A Kutar is an expressionless animal-like living creature. The word 'kuta' means "
                     "'absentmindedly' or 'vacantly'. Their absentmindedness hurts their searching and "
-                    "perception skills, but renders them incapable of being confused. Their unearthly "
+                    "perception skills, but renders them resistant to being confused. Their unearthly "
                     "calmness and serenity make them among the most stealthy of any race. Kutars, "
                     "although expressionless, are beautiful and so have a high charisma. Members of "
                     "this race can learn to expand their body horizontally. This increases armour class, "
@@ -175,7 +175,7 @@ race_t *kutar_get_race(void)
         me.stats[A_WIS] = -1;
         me.stats[A_DEX] =  1;
         me.stats[A_CON] =  2;
-        me.stats[A_CHR] =  0;
+        me.stats[A_CHR] =  2;
 
         me.skills.dis = -2;
         me.skills.dev = 5;
@@ -184,7 +184,7 @@ race_t *kutar_get_race(void)
         me.skills.srh = -2;
         me.skills.fos = 6;
         me.skills.thn = 0;
-        me.skills.thb = -5;
+        me.skills.thb = -3;
 
         me.life = 102;
         me.base_hp = 21;
@@ -309,7 +309,7 @@ race_t *nibelung_get_race(void)
         me.name = "Nibelung";
         me.desc = "The hated and persecuted race of nocturnal dwarves, these cave-dwellers are "
                     "not much bothered by darkness. Their natural inclination to magical items "
-                    "has made them immune to effects which could drain away magical energy.";
+                    "has made them resistant to effects which could disenchant magical energy.";
 
         me.stats[A_STR] =  1;
         me.stats[A_INT] = -1;
@@ -386,7 +386,7 @@ race_t *shadow_fairy_get_race(void)
         me.skills.srh = 12;
         me.skills.fos = 15;
         me.skills.thn =-10;
-        me.skills.thb = -5;
+        me.skills.thb = -3;
 
         me.life = 91;
         me.base_hp = 13;
@@ -432,6 +432,11 @@ static void _skeleton_get_flags(u32b flgs[OF_ARRAY_SIZE])
     if (p_ptr->lev >= 10)
         add_flag(flgs, OF_RES_COLD);
 }
+static void _skeleton_birth(void)
+{
+    py_birth_obj_aux(TV_STAFF, EFFECT_NOTHING, 1);
+    py_birth_light();
+}
 race_t *skeleton_get_race(void)
 {
     static race_t me = {0};
@@ -473,6 +478,7 @@ race_t *skeleton_get_race(void)
         me.flags = RACE_IS_NONLIVING | RACE_IS_UNDEAD;
         me.shop_adjust = 125;
 
+        me.birth = _skeleton_birth;
         me.calc_bonuses = _skeleton_calc_bonuses;
         me.get_powers = _skeleton_get_powers;
         me.get_flags = _skeleton_get_flags;
@@ -525,6 +531,12 @@ static void _snotling_calc_bonuses(void)
 static void _snotling_get_flags(u32b flgs[OF_ARRAY_SIZE])
 {
 }
+static void _snotling_birth(void)
+{
+    py_birth_obj_aux(TV_FOOD, SV_FOOD_CURE_SERIOUS, randint1(3));
+    py_birth_food();
+    py_birth_light();
+}
 race_t *snotling_get_race(void)
 {
     static race_t me = {0};
@@ -551,7 +563,7 @@ race_t *snotling_get_race(void)
         me.skills.stl = 2;
         me.skills.srh = 0;
         me.skills.fos = 7;
-        me.skills.thn = -5;
+        me.skills.thn = -10;
         me.skills.thb = -5;
 
         me.life = 85;
@@ -560,6 +572,7 @@ race_t *snotling_get_race(void)
         me.infra = 2;
         me.shop_adjust = 125;
 
+        me.birth = _snotling_birth;
         me.calc_bonuses = _snotling_calc_bonuses;
         me.get_powers = _snotling_get_powers;
         me.get_flags = _snotling_get_flags;
@@ -603,6 +616,11 @@ static void _spectre_get_flags(u32b flgs[OF_ARRAY_SIZE])
     add_flag(flgs, OF_RES_POIS);
     add_flag(flgs, OF_SLOW_DIGEST);
 }
+static void _spectre_birth(void)
+{
+    py_birth_obj_aux(TV_STAFF, EFFECT_NOTHING, 1);
+    py_birth_light();
+}
 race_t *spectre_get_race(void)
 {
     static race_t me = {0};
@@ -643,6 +661,7 @@ race_t *spectre_get_race(void)
         me.flags = RACE_IS_NONLIVING | RACE_IS_UNDEAD;
         me.shop_adjust = 135;
 
+        me.birth = _spectre_birth;
         me.calc_bonuses = _spectre_calc_bonuses;
         me.get_powers = _spectre_get_powers;
         me.get_flags = _spectre_get_flags;
@@ -790,13 +809,13 @@ race_t *tonberry_get_race(void)
         me.stats[A_CHR] =  0;
 
         me.skills.dis = -5;
-        me.skills.dev =  3;
+        me.skills.dev = -5;
         me.skills.sav =  3;
         me.skills.stl =  1;
         me.skills.srh = -2;
         me.skills.fos =  5;
         me.skills.thn = 20;
-        me.skills.thb =-10;
+        me.skills.thb = -7;
 
         me.life = 108;
         me.base_hp = 26;
@@ -845,6 +864,10 @@ static void _vampire_get_flags(u32b flgs[OF_ARRAY_SIZE])
     add_flag(flgs, OF_RES_POIS);
     add_flag(flgs, OF_RES_COLD);
 }
+static void _vampire_birth(void)
+{
+    py_birth_obj_aux(TV_SCROLL, SV_SCROLL_DARKNESS, rand_range(2, 5));
+}
 race_t *vampire_get_race(void)
 {
     static race_t me = {0};
@@ -885,6 +908,7 @@ race_t *vampire_get_race(void)
         me.flags = RACE_IS_NONLIVING | RACE_IS_UNDEAD;
         me.shop_adjust = 130;
 
+        me.birth = _vampire_birth;
         me.calc_bonuses = _vampire_calc_bonuses;
         me.get_powers = _vampire_get_powers;
         me.get_flags = _vampire_get_flags;
@@ -916,7 +940,8 @@ race_t *wood_elf_get_race(void)
         me.name = "Wood-Elf";
         me.desc = "Wood-Elves are the most common of elves. They prefer the seclusion of thick "
                     "forests and are unhampered when moving through dense foliage. Their skills "
-                    "with tracking and bow are unsurpassed.";
+                    "with tracking and bow are unsurpassed, and as they advance they gain the "
+                    "power of Nature Awareness.";
 
         me.stats[A_STR] = -1;
         me.stats[A_INT] =  1;
@@ -932,7 +957,7 @@ race_t *wood_elf_get_race(void)
         me.skills.srh = 8;
         me.skills.fos = 12;
         me.skills.thn = -5;
-        me.skills.thb = 15;
+        me.skills.thb = 12;
 
         me.life = 97;
         me.base_hp = 16;
@@ -998,7 +1023,7 @@ race_t *yeek_get_race(void)
         me.skills.srh = 5;
         me.skills.fos = 15;
         me.skills.thn = -5;
-        me.skills.thb = -5;
+        me.skills.thb = -3;
 
         me.life = 92;
         me.base_hp = 14;
@@ -1046,6 +1071,11 @@ static void _zombie_get_flags(u32b flgs[OF_ARRAY_SIZE])
     if (p_ptr->lev >= 5)
         add_flag(flgs, OF_RES_COLD);
 }
+static void _zombie_birth(void)
+{
+    py_birth_obj_aux(TV_STAFF, EFFECT_NOTHING, 1);
+    py_birth_light();
+}
 race_t *zombie_get_race(void)
 {
     static race_t me = {0};
@@ -1084,6 +1114,7 @@ race_t *zombie_get_race(void)
         me.flags = RACE_IS_NONLIVING | RACE_IS_UNDEAD;
         me.shop_adjust = 140;
 
+        me.birth = _zombie_birth;
         me.calc_bonuses = _zombie_calc_bonuses;
         me.get_powers = _zombie_get_powers;
         me.get_flags = _zombie_get_flags;

@@ -1146,7 +1146,7 @@ static int dehex(char c)
 }
 
 
-static int my_stricmp(cptr a, cptr b)
+int my_stricmp(cptr a, cptr b)
 {
     cptr s1, s2;
     char z1, z2;
@@ -2345,6 +2345,8 @@ char inkey(void)
     /* Cancel the various "global parameters" */
     inkey_base = inkey_xtra = inkey_flag = inkey_scan = FALSE;
 
+    update_playtime(); /* ... which now limits to 30s max */
+
     /* Return the keypress */
     return (ch);
 }
@@ -2692,6 +2694,9 @@ void clear_from(int row)
  * BACKSPACE (^H) deletes a char at the left of cursor position.
  * ESCAPE clears the buffer and the window and returns FALSE.
  * RETURN accepts the current buffer contents and returns TRUE.
+ *
+ * N.B. len is not the length of buf, but the length of input.
+ * buf s/b char[len+1] ... at least!
  */
 bool askfor_aux(char *buf, int len, bool numpad_cursor)
 {
@@ -2896,6 +2901,9 @@ bool askfor_aux(char *buf, int len, bool numpad_cursor)
  * Get some string input at the cursor location.
  *
  * Allow to use numpad keys as cursor keys.
+ *
+ * N.B. len is not the length of buf, but the length of input.
+ * buf s/b char[len+1] ... at least!
  */
 bool askfor(char *buf, int len)
 {
@@ -2912,6 +2920,9 @@ bool askfor(char *buf, int len)
  * the default response, so be sure to "clear" it if needed.
  *
  * We clear the input, and return FALSE, on "ESCAPE".
+ *
+ * N.B. len is not the length of buf, but the length of input.
+ * buf s/b char[len+1] ... at least!
  */
 bool get_string(cptr prompt, char *buf, int len)
 {
@@ -3074,6 +3085,7 @@ bool get_com(cptr prompt, char *command, bool z_escape)
     /* Wednesday 2016-07-27 20:14:30 lumiera: removing this to avoid annoying -more- prompt in capture ball activation
     msg_print(NULL);
     */
+    msg_line_clear();
 
     /* Display a prompt */
     prt(prompt, 0, 0);
@@ -3445,7 +3457,7 @@ static char inkey_from_menu(void)
                     if (p_ptr->pclass == special_menu_info[hoge].jouken_naiyou) menu_name = special_menu_info[hoge].name;
                     break;
                 case MENU_WILD:
-                    if (!dun_level && !p_ptr->inside_arena && !p_ptr->inside_quest)
+                    if (py_on_surface())
                     {
                         if ((byte)p_ptr->wild_mode == special_menu_info[hoge].jouken_naiyou) menu_name = special_menu_info[hoge].name;
                     }
@@ -3808,7 +3820,7 @@ void request_command(int shopping)
 
 
     /* Hack -- Scan equipment */
-    for (i = EQUIP_BEGIN; i < EQUIP_BEGIN + equip_count(); i++)
+    for (i = 1; i <= equip_max(); i++)
     {
         cptr s;
         object_type *o_ptr = equip_obj(i);
@@ -3981,46 +3993,101 @@ int get_keymap_dir(char ch)
 
 #ifdef ALLOW_REPEAT /* TNB */
 
-#define REPEAT_MAX        20
+#define REPEAT_MAX 20
 
-/* Number of chars saved */
-static int repeat__cnt = 0;
+typedef struct {
+    int keys[REPEAT_MAX];
+    int ct;
+    int pos;
+} _repeat_buffer_t, *_repeat_buffer_ptr;
 
-/* Current index */
-static int repeat__idx = 0;
+static _repeat_buffer_t _repeat_buffers[255];
 
-/* Saved "stuff" */
-static int repeat__key[REPEAT_MAX];
+enum { _UNKNOWN, _RECORDING, _PLAYING };
+static char _repeat_reg;
+static int _repeat_state;
 
+static void _repeat_push(_repeat_buffer_ptr buf, int what)
+{
+    if (buf->ct == REPEAT_MAX) return;
+    buf->keys[buf->ct++] = what;
+}
 
 void repeat_push(int what)
 {
-    /* Too many keys */
-    if (repeat__cnt == REPEAT_MAX) return;
-
-    /* Push the "stuff" */
-    repeat__key[repeat__cnt++] = what;
-
-    /* Prevents us from pulling keys */
-    ++repeat__idx;
+    if (_repeat_state == _RECORDING)
+    {
+        _repeat_push(&_repeat_buffers['.'], what);
+        if (_repeat_reg && _repeat_reg != '.')
+            _repeat_push(&_repeat_buffers[(int)_repeat_reg], what);
+    }
 }
 
+static void _repeat_pop(_repeat_buffer_ptr buf)
+{
+    if (buf->ct > 0)
+        buf->ct--;
+}
+
+void repeat_pop(void)
+{
+    if (_repeat_state == _RECORDING)
+    {
+        _repeat_pop(&_repeat_buffers['.']);
+        if (_repeat_reg && _repeat_reg != '.')
+            _repeat_pop(&_repeat_buffers[(int)_repeat_reg]);
+    }
+}
+
+static bool _repeat_pull(_repeat_buffer_ptr buf, int *what)
+{
+    if (buf->pos >= buf->ct) return FALSE;
+    *what = buf->keys[buf->pos++];
+    return TRUE;
+}
 
 bool repeat_pull(int *what)
 {
-    /* All out of keys */
-    if (repeat__idx == repeat__cnt) return (FALSE);
-
-    /* Grab the next key, advance */
-    *what = repeat__key[repeat__idx++];
-
-    /* Success */
-    return (TRUE);
+    if (_repeat_state == _PLAYING)
+        return _repeat_pull(&_repeat_buffers[(int)_repeat_reg], what);
+    return FALSE;
 }
 
-void repeat_check(void)
+static void _repeat_list_aux(doc_ptr doc, int i)
 {
-    int        what;
+    _repeat_buffer_ptr buf = &_repeat_buffers[i];
+    if (buf->ct)
+    {
+        int j, c;
+        doc_printf(doc, "<color:y>%c</color>:", (char)i);
+        for (j = 0; j < buf->ct; j++)
+        {
+            c = buf->keys[j];
+            /* Range checking is required before calling isprint on Windows */
+            if (0 < c && c < 256 && isprint(c))
+                doc_printf(doc, "'%c' ", (char)c);
+            else
+                doc_printf(doc, "%d ", c);
+        }
+        doc_newline(doc);
+    }
+}
+
+static void _repeat_list(void)
+{
+    int     i;
+    rect_t  r = ui_map_rect();
+    doc_ptr doc = doc_alloc(r.cx < 80 ? r.cx : 80);
+
+    for (i = 0; i < 255; i++)
+        _repeat_list_aux(doc, i);
+    doc_sync_term(doc, doc_range_all(doc), doc_pos_create(r.x, r.y));
+    doc_free(doc);
+}
+
+void repeat_check(int shopping)
+{
+    int what;
 
     /* Ignore some commands */
     if (command_cmd == ESCAPE) return;
@@ -4028,30 +4095,77 @@ void repeat_check(void)
     if (command_cmd == '\r') return;
     if (command_cmd == '\n') return;
 
-    /* Repeat Last Command */
-    if (command_cmd == 'n')
+    /* Playback Command */
+    if (command_cmd == '\'')
     {
-        /* Reset */
-        repeat__idx = 0;
-
-        /* Get the command */
-        if (repeat_pull(&what))
+        _repeat_state = _PLAYING;
+        prt("Playback: ", 0, 0);
+        _repeat_reg = inkey_special(FALSE);
+        if (_repeat_reg == '\'')
         {
-            /* Save the command */
+            Term_save();
+            _repeat_list();
+            _repeat_reg = inkey_special(FALSE);
+            Term_load();
+        }
+        prt("", 0, 0);
+        if (_repeat_reg == ESCAPE)
+        {
+            _repeat_reg = 0;
+            command_cmd = ESCAPE;
+            _repeat_state = _UNKNOWN;
+            return;
+        }
+        _repeat_buffers[(int)_repeat_reg].pos = 0;
+        if (repeat_pull(&what))
             command_cmd = what;
+        else
+        {
+            msg_format("There is no recorded command in <color:y>%c</color>. Type <color:keypress>'</color> to view recordings.", _repeat_reg);
+            _repeat_reg = 0;
+            _repeat_state = _UNKNOWN;
+            command_cmd = ESCAPE;
+            return;
         }
     }
-
-    /* Start saving new command */
-    else
+    /* Repeat Last Command: Backwards Compatibility. Same as '. */
+    else if (command_cmd == 'n')
     {
-        /* Reset */
-        repeat__cnt = 0;
-        repeat__idx = 0;
+        _repeat_state = _PLAYING;
+        _repeat_reg = '.';
+        _repeat_buffers[(int)_repeat_reg].pos = 0;
+        if (repeat_pull(&what))
+            command_cmd = what;
+        else
+            request_command(shopping);
+    }
+    /* Record Command */
+    else 
+    {
+        _repeat_state = _RECORDING;
+        _repeat_reg = 0;
+        if (command_cmd == '"')
+        {
+            prt("Record: ", 0, 0);
+            _repeat_reg = inkey_special(FALSE);
+            prt("", 0, 0);
+            if (_repeat_reg == ESCAPE)
+            {
+                _repeat_reg = 0;
+                command_cmd = ESCAPE;
+                _repeat_state = _UNKNOWN;
+                return;
+            }
+            _repeat_buffers[(int)_repeat_reg].ct = 0;
+            _repeat_buffers[(int)_repeat_reg].pos = 0;
+            prt("Command: ", 0, 0);
+            request_command(shopping);
+            prt("", 0, 0);
+        }
+        _repeat_buffers['.'].ct = 0;
+        _repeat_buffers['.'].pos = 0;
 
         what = command_cmd;
-
-        /* Save this command */
         repeat_push(what);
     }
 }
@@ -4504,63 +4618,109 @@ void str_tolower(char *str)
     }
 }
 
-
 /*
  * Get a keypress from the user.
  * And interpret special keys as internal code.
  *
  * This function is a Mega-Hack and depend on pref-xxx.prf's.
  * Currently works on Linux(UNIX), Windows, and Macintosh only.
+ *
+ * CTK: I don't fully understand this routine, but the codes
+ * parsed were those in X11. Perhaps Windows uses the same?
+ * At any rate, they definitely don't work under curses and
+ * sdl which make things like the Mogaminator editor painful
+ * to use. I'm trying a fix for sdl ...
  */
+typedef struct {
+    cptr keyname;
+    int keyflag;
+} _modifier_t, *_modifier_ptr; 
+
+static _modifier_t _x11_modifiers[] = {
+    {"shift-", SKEY_MOD_SHIFT},
+    {"control-", SKEY_MOD_CONTROL},
+    {NULL, 0},
+};
+
+/* sdl: ^_S[[7]] for SHIFT+NUM_PAD7
+ *      ^_C[up] for SHIFT+UP (not on the numpad) */
+static _modifier_t _sdl_modifiers[] = {
+    {"S", SKEY_MOD_SHIFT},
+    {"C", SKEY_MOD_CONTROL},
+    {NULL, 0},
+};
+
+typedef struct {
+    bool numpad;
+    cptr keyname;
+    int keycode;
+} _special_key_t, *_special_key_ptr;
+
+static _special_key_t _x11_special_keys[] = {
+    {FALSE, "Down]", SKEY_DOWN},
+    {FALSE, "Left]", SKEY_LEFT},
+    {FALSE, "Right]", SKEY_RIGHT},
+    {FALSE, "Up]", SKEY_UP},
+    {FALSE, "Page_Up]", SKEY_PGUP},
+    {FALSE, "Page_Down]", SKEY_PGDOWN},
+    {FALSE, "Home]", SKEY_TOP},
+    {FALSE, "End]", SKEY_BOTTOM},
+    {TRUE, "KP_Down]", SKEY_DOWN},
+    {TRUE, "KP_Left]", SKEY_LEFT},
+    {TRUE, "KP_Right]", SKEY_RIGHT},
+    {TRUE, "KP_Up]", SKEY_UP},
+    {TRUE, "KP_Page_Up]", SKEY_PGUP},
+    {TRUE, "KP_Page_Down]", SKEY_PGDOWN},
+    {TRUE, "KP_Home]", SKEY_TOP},
+    {TRUE, "KP_End]", SKEY_BOTTOM},
+    {TRUE, "KP_2]", SKEY_DOWN},
+    {TRUE, "KP_4]", SKEY_LEFT},
+    {TRUE, "KP_6]", SKEY_RIGHT},
+    {TRUE, "KP_8]", SKEY_UP},
+    {TRUE, "KP_9]", SKEY_PGUP},
+    {TRUE, "KP_3]", SKEY_PGDOWN},
+    {TRUE, "KP_7]", SKEY_TOP},
+    {TRUE, "KP_1]", SKEY_BOTTOM},
+    {FALSE, NULL, 0},
+};
+static _special_key_t _sdl_special_keys[] = {
+    {FALSE, "[down]", SKEY_DOWN},
+    {FALSE, "[left]", SKEY_LEFT},
+    {FALSE, "[right]", SKEY_RIGHT},
+    {FALSE, "[up]", SKEY_UP},
+    {FALSE, "[page_up]", SKEY_PGUP},
+    {FALSE, "[page_down]", SKEY_PGDOWN},
+    {FALSE, "[home]", SKEY_TOP},
+    {FALSE, "[end]", SKEY_BOTTOM},
+    {TRUE, "[[2]]", SKEY_DOWN},
+    {TRUE, "[[4]]", SKEY_LEFT},
+    {TRUE, "[[6]]", SKEY_RIGHT},
+    {TRUE, "[[8]]", SKEY_UP},
+    {TRUE, "[[9]]", SKEY_PGUP},
+    {TRUE, "[[3]]", SKEY_PGDOWN},
+    {TRUE, "[[7]]", SKEY_TOP},
+    {TRUE, "[[1]]", SKEY_BOTTOM},
+    {FALSE, NULL, 0},
+};
 int inkey_special(bool numpad_cursor)
 {
-    static const struct {
-        cptr keyname;
-        int keyflag;
-    } modifier_key_list[] = {
-        {"shift-", SKEY_MOD_SHIFT},
-        {"control-", SKEY_MOD_CONTROL},
-        {NULL, 0},
-    };
+    _modifier_ptr    modifiers = _x11_modifiers;
+    _special_key_ptr keys = _x11_special_keys;
+    cptr             start = "\\[";
+    char             buf[1024];
+    cptr             str = buf;
+    char             key;
+    int              skey = 0;
+    int              modifier = 0;
+    int              i;
+    size_t           trig_len;
 
-    static const struct {
-        bool numpad;
-        cptr keyname;
-        int keycode;
-    } special_key_list[] = {
-        {FALSE, "Down]", SKEY_DOWN},
-        {FALSE, "Left]", SKEY_LEFT},
-        {FALSE, "Right]", SKEY_RIGHT},
-        {FALSE, "Up]", SKEY_UP},
-        {FALSE, "Page_Up]", SKEY_PGUP},
-        {FALSE, "Page_Down]", SKEY_PGDOWN},
-        {FALSE, "Home]", SKEY_TOP},
-        {FALSE, "End]", SKEY_BOTTOM},
-        {TRUE, "KP_Down]", SKEY_DOWN},
-        {TRUE, "KP_Left]", SKEY_LEFT},
-        {TRUE, "KP_Right]", SKEY_RIGHT},
-        {TRUE, "KP_Up]", SKEY_UP},
-        {TRUE, "KP_Page_Up]", SKEY_PGUP},
-        {TRUE, "KP_Page_Down]", SKEY_PGDOWN},
-        {TRUE, "KP_Home]", SKEY_TOP},
-        {TRUE, "KP_End]", SKEY_BOTTOM},
-        {TRUE, "KP_2]", SKEY_DOWN},
-        {TRUE, "KP_4]", SKEY_LEFT},
-        {TRUE, "KP_6]", SKEY_RIGHT},
-        {TRUE, "KP_8]", SKEY_UP},
-        {TRUE, "KP_9]", SKEY_PGUP},
-        {TRUE, "KP_3]", SKEY_PGDOWN},
-        {TRUE, "KP_7]", SKEY_TOP},
-        {TRUE, "KP_1]", SKEY_BOTTOM},
-        {FALSE, NULL, 0},
-    };
-    char buf[1024];
-    cptr str = buf;
-    char key;
-    int skey = 0;
-    int modifier = 0;
-    int i;
-    size_t trig_len;
+    if (strcmp(ANGBAND_SYS, "sdl") == 0)
+    {
+        modifiers = _sdl_modifiers;
+        keys = _sdl_special_keys;
+        start = "^_";
+    }
 
     /*
      * Forget macro trigger ----
@@ -4595,38 +4755,38 @@ int inkey_special(bool numpad_cursor)
     ascii_to_text(buf, inkey_macro_trigger_string);
 
     /* Check the prefix "\[" */
-    if (prefix(str, "\\["))
+    if (prefix(str, start))
     {
         /* Skip "\[" */
-        str += 2;
+        str += strlen(start);
 
         /* Examine modifier keys */
         while (TRUE)
         {
-            for (i = 0; modifier_key_list[i].keyname; i++)
+            for (i = 0; modifiers[i].keyname; i++)
             {
-                if (prefix(str, modifier_key_list[i].keyname))
+                if (prefix(str, modifiers[i].keyname))
                 {
                     /* Get modifier key flag */
-                    str += strlen(modifier_key_list[i].keyname);
-                    modifier |= modifier_key_list[i].keyflag;
+                    str += strlen(modifiers[i].keyname);
+                    modifier |= modifiers[i].keyflag;
                 }
             }
 
             /* No more modifier key found */
-            if (!modifier_key_list[i].keyname) break;
+            if (!modifiers[i].keyname) break;
         }
 
         /* numpad_as_cursorkey option force numpad keys to input numbers */
         if (!numpad_as_cursorkey) numpad_cursor = FALSE;
 
         /* Get a special key code */
-        for (i = 0; special_key_list[i].keyname; i++)
+        for (i = 0; keys[i].keyname; i++)
         {
-            if ((!special_key_list[i].numpad || numpad_cursor) &&
-                streq(str, special_key_list[i].keyname))
+            if ((!keys[i].numpad || numpad_cursor) &&
+                streq(str, keys[i].keyname))
             {
-                skey = special_key_list[i].keycode;
+                skey = keys[i].keycode;
                 break;
             }
         }

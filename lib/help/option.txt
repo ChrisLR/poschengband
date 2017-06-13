@@ -50,11 +50,6 @@ If this option is enabled, all monsters become unusually powerful, and fast. And
 <topic:preserve_mode><color:U>Preserve artifacts</color> <color:D>(preserve_mode)</color>
 In non-preserve mode, once a fixed artifact is generated (either on the dungeon floor or in a monster drop), it will never be generated again during that game. This means that if you miss the artifact by leaving the level before you pick it up it is gone forever. On the other hand, in preserve mode this behavior is only exhibited once you have identified the artifact. It is therefor safer to leave a level before it is completely explored as any fixed artifact can be regenerated in subsequent levels.
 
-<topic:autoroller><color:U>Allow use of autoroller for stats</color> <color:D>(autoroller)</color>
-If you choose to use the auto-roller, you can specify minimum limit of each stat. Once you have specified your desired statistics, the computer will then randomly roll successive start-up characters and compare them to your specified criteria. Each stat is rolled as a number from 8 to 17, with a normal distribution, and is then immediately modified based upon the race and class which you have chosen. Once a character that matches or exceeds your expectations has been rolled, the computer will display the character for you to look at, and asks you whether you accept or not. You may press Enter to accept. If you do not accept, you may press 'r' to resume rolling and searching for the next match or, if this is not your first match, 'p' to return to the previous character which met your criteria.
-
-<topic:powerup_home><color:U>Increase capacity of your home</color> <color:D>(powerup_home)</color>
-If this option is enabled, the capacity of your home will be expanded to 20 pages. If not, capacity is only 2 pages.
 </indent>
 <topic:Input><style:heading>Input Options</style>
   <indent>
@@ -63,9 +58,6 @@ Selects the <color:keyword>roguelike</color> command set which is an alternative
 
 <topic:always_pickup><color:U>Pick things up by default</color> <color:D>(always_pickup)</color>
 Tells the game that walking onto an item should attempt to pick it up. Otherwise, you must use the <color:keypress>g</color> command, or the <color:keypress>-</color> command while walking. Combined with <color:keyword>carry_query_flag</color>, allows you to selectively pick up all items which you step on.
-
-<topic:carry_query_flag><color:U>Prompt before picking things up</color> <color:D>(carry_query_flag)</color>
-Forces the game to ask you if you want to pick something up when you do something that would normally cause the item to be picked up.
 
 <topic:quick_messages><color:U>Activate quick messages</color> <color:D>(quick_messages)</color>
 Allows the use of any keypress as a response to the <color:B>-more-</color> prompt (useful for monster farming). Allows most keys to mean "no" to any "(y/n)" prompt.
@@ -83,11 +75,12 @@ The command selection menu is a helpful tool for beginning players. By pressing 
           |   Command pets(p)         Search mode ON/OFF(S/#)  |
           +----------------------------------------------------+
 </style>
-<topic:other_query_flag><color:U>Prompt for floor item selection</color> <color:D>(other_query_flag)</color>
-Forces the game to ask you before select an item on floor.
 
 <topic:use_old_target><color:U>Use old target by default</color> <color:D>(use_old_target)</color>
-Forces all commands which normally ask for a <color:keyword>direction</color> to use the current <color:keyword>target</color> if there is one. Use of this option can be dangerous if you target locations on the ground, unless you clear them when done.
+This option forces all commands which normally ask for a <color:keyword>direction</color> to use the current <color:keyword>target</color> if there is one. Use of this option can be dangerous if you target locations on the ground, unless you clear them when done. Actually, position targets now automatically clear when they are no longer valid (e.g. after a teleport). Pay attention to the character info section of your screen as it always shows your current target, whether monster or location.
+
+<topic:auto_target><color:U>Automatically target nearest monster</color> <color:D>(auto_target)</color>
+With this option enabled, every offensive spell you cast or device you use will automatically target the closest monster if there is not already a valid target selected. If you use this option, then it is highly recommended that you also enable the <color:keyword>use_old_target</color> option. That way, if you are in a situation where the automatic targeting is not what you want, you can just select a target up front before casting your spell.
 
 <topic:always_repeat><color:U>Repeat obvious commands</color> <color:D>(always_repeat)</color>
 Tells the game that when you attempt to <color:keyword>open</color> a door or chest, <color:keyword>bash</color> a door, <color:keyword>tunnel</color> through walls, or <color:keyword>disarm</color> traps or chests, that you wish to repeat the command 99 times (see <link:command.txt#CommandCounts>).
@@ -110,14 +103,20 @@ Makes it easy for your character to open a door: simply by walking into it! Also
 <topic:easy_disarm><color:U>Automatically disarm traps</color> <color:D>(easy_disarm)</color>
 Makes it easy for your character disarms a trap: simply by walking into it! Also the disarm command will automatically select one direction if only one known trap is near you.
 
+<topic:auto_get_ammo><color:U>Automatically get nearby ammo</color> <color:D>(auto_get_ammo)</color>
+This option instructs the Auto-Get Objects command (<color:keypress>^G</color>) to automatically travel to nearby, visible ammo which is inscribed with <color:keypress>=g</color> (i.e., ammo which you have instructed the autopicker to automatically pickup). This enhancement is useful for archer builds after all nearby monsters have been slain. You might consider using the stronger <color:keyword>auto_get_objects</color> option instead.
+
+<topic:auto_get_objects><color:U>Automatically get nearby objects</color> <color:D>(auto_get_objects)</color>
+This option instructs the Auto-Get Objects command (<color:keypress>^G</color>) to automatically travel to nearby visible objects which you have registered to either pickup or destroy. This option subsumes (and extends) the <color:keyword>auto_get_ammo</color> option since ammo inscribed with <color:keypress>=g</color> is certainly registered for auto-pickup.
+
 <topic:easy_floor><color:U>Display floor stacks in a list</color> <color:D>(easy_floor)</color>
 Lets you select an item from a stack on the floor by browsing a list. Also the look command will describe floor stack as "You see a stack of n items.", when there is more than one item on a floor grid, and display a list of items when you press 'x' at that time.
 
-<topic:over_exert><color:U>Allow casting spells when short of mana</color> <color:D>(over_exert)</color>
-Normally, you are prevented from casting spells when you don't have enough mana since accidentally doing so can have very nasty consequences, including death. If this option is set, then you are permitted to cast spells at such dangerous times, with a warning prompt, of course!
-
 <topic:numpad_as_cursorkey><color:U>Use numpad keys as cursor keys in editor mode</color> <color:D>(numpad_as_cursorkey)</color>
 This option makes numpad keys work as cursor movement keys while text editing mode. Which include auto-picker editor, inputing an inscription, a macro action, and etc.
+
+<topic:use_pack_slots><color:U>Use and Display Inventory Slots</color> <color:D>(use_pack_slots)</color>
+With this option, the object prompt will use and display the current inventory slot for objects in question. For example, if your food happens to currently be in slot h), the the <color:keypress>E</color>at command will require you to press <color:keypress>h</color> to use this item. Without this option, each object prompt will begin labels at a). Some players prefer to keep the inventory slot, even though it constantly shifts as you add and remove new objects to your pack. Other players prefer to have commands use the same labels for the same objects upon successive calls (For example, pick up a spellbook and your food is now in the i) slot. This may puzzle you, since the last time you were hungry you pressed <color:keypress>Eh</color>, but now you need to press <color:keypress>Ei</color>. With this option turned off, eating rations of food will always be <color:keypress>Ea</color> ... at least until you pick up some mushrooms! However, if you do, then your eye will quickly perceive the presence of two items in the object prompt next time you <color:keypress>E</color>at).
 </indent>
 <topic:MapScreen><style:heading>Map & Screen Options</style>
   <indent>
@@ -150,16 +149,16 @@ Unknown grids that have not been traversed previously, or had a detect trap spel
 
 <topic:fresh_before><color:U>Flush output while continuous command</color> <color:D>(fresh_before)</color>
 This option forces the game to flush all output before every command. This will give you maximal information, but may slow down the game somewhat. Note that this option is only useful when using macros, resting, running, or repeating commands, since the output is always flushed when the game is waiting for a keypress from the user.
-    
+
 <topic:fresh_after><color:U>Flush output after monster's move</color> <color:D>(fresh_after)</color>
 This option forces the game to flush all output after not only every player command, but also after every round of processing monsters and objects, which will give you maximal information, but may slow down the game a lot, especially on slower machines, and on faster machines you normally do not have a chance to see the results anyway.
-    
+
 <topic:fresh_message><color:U>Flush output after every message</color> <color:D>(fresh_message)</color>
 This option forces the game to flush all output after every message displayed by the game. This will give you maximal information, but may slow down the game somewhat.
 
 <topic:hilite_player><color:U>Hilite the player with the cursor</color> <color:D>(hilite_player)</color>
 Place the visible cursor on the player. This looks fine on some Unix machines, but horrible on most graphics machines. Note that only some machines are able to *not* show the cursor, but on those machines, hiding the cursor often speeds up the game and looks better.
-    
+
 <topic:display_path><color:U>Display actual path before shooting</color> <color:D>(display_path)</color>
 When this option is set, the targeting mode will show path from you to current target point continuously.
 </indent>
@@ -221,6 +220,9 @@ Setting this option to yes alters the display of experience on the left of the m
 
 <topic:ignore_unview><color:U>Ignore actions of out of sight monsters</color> <color:D>(ignore_unview)</color>
 With this option, you won't receive messages when out of sight monsters fight one another. This is useful if you are playing with lots of pets and don't wish to read a blow by blow account of the battle raging around you.
+
+<topic:display_race><color:U>Player character depends on their race</color> <color:D>(display_race)</color>
+With this option a player who plays as a Quylthulg, for example, will be represented by a Q. If the option is turned off the player will always be @. 
 </indent>
 <topic:GamePlay><style:heading>Game Play Options</style>
   <indent>
@@ -255,22 +257,22 @@ Since use of debug command(^A), wizard mode(^W), and Cheating options ('C' in op
   <indent>
 <topic:find_ignore_stairs><color:U>Run past stairs</color> <color:D>(find_ignore_stairs)</color>
 Ignore stairs when running.
-    
+
 <topic:find_ignore_doors><color:U>Run through open doors</color> <color:D>(find_ignore_doors)</color>
 Ignore open doors when running.
-    
+
 <topic:find_cut><color:U>Run past known corners</color> <color:D>(find_cut)</color>
 Cut sharply around known corners when running. This will result in faster running, but may cause you to run into a lurking monster.
 
 <topic:check_abort><color:U>Check for user abort while continuous command</color> <color:D>(check_abort)</color>
-Avoid checking to see if the user has pressed a key during resting or running or repeated commands. This not only makes the game much more efficient (on many systems), but also allows the use of certain obscure macro sequences, such as turning this option on, resting until done, turning this option off, and casting a spell. Note that the use of this option may be dangerous on certain "graphic" machines. Resting for long periods of time with this option set is dangerous since the resting may not stop until the user takes damage from starvation.
+Turning this option off will avoid checking to see if the user has pressed a key during resting or running or repeated commands. This not only makes the game much more efficient (on many systems), but also allows the use of certain obscure macro sequences, such as turning this option off, resting until done, turning this option on, and casting a spell. Resting for long periods of time with this option turned off is dangerous since the resting may not stop until the user takes damage from starvation.
 
 <topic:flush_failure><color:U>Flush input on various failures</color> <color:D>(flush_failure)</color>
 This option forces the game to flush all pending input whenever various "failures" occur, such as failure to cast a spell, failure to use a wand, etc. This is very useful if you use macros which include "directional" components with commands that can fail, since it will prevent you from walking towards monsters when your spells fail.
 
 <topic:flush_disturb><color:U>Flush input whenever disturbed</color> <color:D>(flush_disturb)</color>
 This option forces the game to flush all pending input whenever the character is "disturbed". This is useful if you use macros which take time, since it will prevent you from continuing your macro while being attacked by a monster.
-    
+
 <topic:disturb_move><color:U>Disturb whenever any monster moves</color> <color:D>(disturb_move)</color>
 Disturb the player when any monster moves, appears, or disappears. This includes monsters which are only visible due to telepathy, so you should probably turn this option off if you want to "rest" near such monsters.
 
@@ -285,7 +287,7 @@ The player may wish that some of the disturbance options do not apply to pets: f
 
 <topic:disturb_panel><color:U>Disturb whenever map panel changes</color> <color:D>(disturb_panel)</color>
 This option causes you to be disturbed by the map scrolling, as it does automatically when you get close to the edge of the screen.
-    
+
 <topic:disturb_state><color:U>Disturb whenever player state changes</color> <color:D>(disturb_state)</color>
 This option causes you to be disturbed whenever the player state changes, including changes in hunger, resistance, confusion, etc.
 
@@ -294,7 +296,7 @@ This option causes you to be disturbed by various bring things, including monste
 
 <topic:ring_bell><color:U>Audible bell (on errors, etc)</color> <color:D>(ring_bell)</color>
 Attempt to make a bell noise when various errors occur.
-    
+
 <topic:disturb_trap_detect><color:U>Disturb when leaving trap detected area</color> <color:D>(disturb_trap_detect)</color>
 This option causes you to be disturbed when the player is running out of trap-detected area.
 
@@ -308,10 +310,10 @@ This option turns The Easy Destroyer on and off. If enabled, The Easy Destroyer 
 
 <style:note>Note: The <color:keyword>Easy Auto-Destroyer</color> is a simpler to use version of the full featured <color:keyword>Mogaminator</color> discussed in <link:editor.txt>. It is designed for those who feel the full version is too complicated to use. However, you really should only use one or the other. So if you are using the full version, then you should not also enable the easy version.</style>
 
-<topic:destroy_feeling><color:U>Apply auto-destroy as sense feeling</color> <color:D>(destroy_feeling)</color>
+<topic:destroy_feeling><color:U>Apply auto-destroy on sensing an item</color> <color:D>(destroy_feeling)</color>
 If this option is turned on, both The Mogaminator and The Easy Destroyer will take actions whenever the player senses the quality of an object (i.e., whenever pseudo-id kicks in).
 
-<topic:destroy_identify><color:U>Apply auto-destroy as identify an item</color> <color:D>(destroy_identify)</color>
+<topic:destroy_identify><color:U>Apply auto-destroy on identifying an item</color> <color:D>(destroy_identify)</color>
 If this option is turned on, both The Mogaminator and The Easy Destroyer will take actions whenever the player identifies an object, whether with a spell or with a magical device (but, alas, not via a town service).
 
 <topic:destroy_debug><color:U>List the rule used when applying the Mogaminator</color> <color:D>(destroy_debug)</color>

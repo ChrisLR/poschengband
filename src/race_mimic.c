@@ -262,9 +262,9 @@ static void _list(_choice_array_t *choices)
                     sprintf(buf, "%+3d%%", r_ptr->body.life);
                     c_put_str(TERM_WHITE, buf, row, extra_col + 30);
 
-                    for (j = 0; j < body->count; j++)
+                    for (j = 1; j <= body->max; j++)
                     {
-                        int c = extra_col + 36 + j;
+                        int c = extra_col + 35 + j;
                         int r = row;
                         switch (body->slots[j].type)
                         {
@@ -733,15 +733,18 @@ static void _birth(void)
     equip_on_change_race();
 
     object_prep(&forge, lookup_kind(TV_SWORD, SV_LONG_SWORD));
-    add_outfit(&forge);
+    py_birth_obj(&forge);
 
     object_prep(&forge, lookup_kind(TV_SOFT_ARMOR, SV_LEATHER_SCALE_MAIL));
-    add_outfit(&forge);
+    py_birth_obj(&forge);
 
     object_prep(&forge, lookup_kind(TV_RING, 0));
     forge.name2 = EGO_RING_COMBAT;
     forge.to_d = 3;
-    add_outfit(&forge);
+    py_birth_obj(&forge);
+
+    py_birth_food();
+    py_birth_light();
 }
 
 static bool _is_visible(int r_idx)

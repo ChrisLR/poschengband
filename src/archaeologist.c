@@ -84,7 +84,7 @@ static bool _whip_fetch(int dir, int rng)
             tx += ddx[dir];
             c_ptr = &cave[ty][tx];
 
-            if ((distance(py, px, ty, tx) > MAX_RANGE) ||
+            if ((distance(py, px, ty, tx) > rng) ||
                 !in_bounds(ty, tx) ||
                 !cave_have_flag_bold(ty, tx, FF_PROJECT))
             {
@@ -105,16 +105,9 @@ static bool _whip_fetch(int dir, int rng)
     object_desc(o_name, o_ptr, OD_NAME_ONLY);
 
     /* Get the object */
-    if (!inven_carry_okay(o_ptr))
-    {
-        cmsg_format(TERM_VIOLET, "You fail to fetch %^s since your pack is full.", o_name);
-        /* Leave the object where it is */
-    }
-    else
-    {
-        msg_format("You skillfully crack your whip and fetch %^s.", o_name);
-        py_pickup_aux(c_ptr->o_idx);
-    }
+    msg_format("You skillfully crack your whip and fetch %^s.", o_name);
+    pack_carry(o_ptr);
+    obj_release(o_ptr, OBJ_RELEASE_QUIET);
 
     return TRUE;
 }
@@ -146,8 +139,8 @@ static bool _sense_great_discovery(int range)
         if (object_is_known(o_ptr)) continue;
 
         /* Location */
-        y = o_ptr->iy;
-        x = o_ptr->ix;
+        y = o_ptr->loc.y;
+        x = o_ptr->loc.x;
 
         /* Only detect nearby objects */
         if (distance(py, px, y, x) > range2) continue;
@@ -177,18 +170,10 @@ static void _ancient_protection_spell(int cmd, variant *res)
         var_set_string(res, "Ancient Protection");
         break;
     case SPELL_DESC:
-        if (p_ptr->lev < 50)
-            var_set_string(res, "Sets a glyph on the floor beneath you. Monsters cannot attack you if you are on a glyph, but can try to break glyph.");
-        else
-            var_set_string(res, "Sets glyphs on nearby floors. Monsters cannot attack you if you are on a glyph, but can try to break glyph.");
-        break;
-    case SPELL_SPOIL_DESC:
-        var_set_string(res, "Sets a glyph on the floor beneath you. Monsters cannot attack you if you are on a glyph, but can try to break glyph. At L50, this spell also surrounds the player with 8 additional glyphs.");
+        var_set_string(res, "Sets a glyph on the floor beneath you. Monsters cannot attack you if you are on a glyph, but can try to break glyph.");
         break;
     case SPELL_CAST:
         warding_glyph();
-        if (p_ptr->lev >= 50)
-            glyph_creation();
         var_set_bool(res, TRUE);
         break;
     default:
@@ -246,20 +231,20 @@ static void _double_crack_spell(int cmd, variant *res)
                     /* random direction, but we don't penalize for choosing the player (5) */
                     dir = randint0(9);
                     if (dir == 5) continue;
-                    
+
                     attempts++;
                     y = py + ddy[dir];
                     x = px + ddx[dir];
 
-                    if ( !in_bounds(y, x) 
+                    if ( !in_bounds(y, x)
                       || cave_have_flag_bold(y, x, FF_WALL)
-                      || cave_have_flag_bold(y, x, FF_TREE) 
+                      || cave_have_flag_bold(y, x, FF_TREE)
                       || cave_have_flag_bold(y, x, FF_CAN_DIG) )
                     {
                         continue;
                     }
 
-                    
+
                     if (cave[y][x].m_idx)
                         py_attack(y, x, 0);
                     else
@@ -321,8 +306,8 @@ static void _excavation_spell(int cmd, variant *res)
     case SPELL_ENERGY:
         {
             int n = 200;
-            
-            if (equip_find_object(TV_DIGGING, SV_ANY))
+
+            if (equip_find_obj(TV_DIGGING, SV_ANY))
                 n -= 120 * p_ptr->lev / 50;
             else
                 n -= 80 * p_ptr->lev / 50;
@@ -347,12 +332,12 @@ static void _excavation_spell(int cmd, variant *res)
                     msg_print("You may excavate no further.");
                 }
                 else if ( cave_have_flag_bold(y, x, FF_WALL)
-                       || cave_have_flag_bold(y, x, FF_TREE) 
+                       || cave_have_flag_bold(y, x, FF_TREE)
                        || cave_have_flag_bold(y, x, FF_CAN_DIG) )
                 {
                     msg_print("You dig your way to treasure!");
                     cave_alter_feat(y, x, FF_TUNNEL);
-                    teleport_player_to(y, x, TELEPORT_NONMAGICAL); /*??*/
+                    move_player_effect(y, x, 0);
                     b = TRUE;
                 }
                 else
@@ -386,7 +371,7 @@ static void _extended_whip_spell(int cmd, variant *res)
             bool b = FALSE;
 
             project_length = 2;
-            if (get_aim_dir(&dir))
+            if (get_fire_dir(&dir))
             {
                 project_hook(GF_ATTACK, dir, HISSATSU_2, PROJECT_STOP | PROJECT_KILL);
                 b = TRUE;
@@ -698,7 +683,7 @@ static void _remove_obstacles_spell(int cmd, variant *res)
  * Spell Table and Exports
  ****************************************************************/
 
-static spell_info _spells[] = 
+static spell_info _spells[] =
 {
     /*lvl cst fail spell */
     {  1,   3, 10, _extended_whip_spell },
@@ -767,6 +752,9 @@ static void _calc_bonuses(void)
         p_ptr->see_inv = TRUE;
     if (p_ptr->lev >= 38)
         res_add(RES_DARK);
+
+    if (p_ptr->lev >= 20) /* L10 spell, but the fail rate is significant */
+        p_ptr->auto_id_sp = 10;
 }
 
 static void _get_flags(u32b flgs[OF_ARRAY_SIZE])
@@ -785,7 +773,9 @@ static caster_info * _caster_info(void)
     {
         me.magic_desc = "spell";
         me.which_stat = A_WIS;
-        me.weight = 400;
+        me.encumbrance.max_wgt = 400;
+        me.encumbrance.weapon_pct = 33;
+        me.encumbrance.enc_wgt = 800;
         init = TRUE;
     }
     return &me;
@@ -797,6 +787,37 @@ static void _character_dump(doc_ptr doc)
     int        ct = _get_spells(spells, MAX_SPELLS);
 
     py_display_spells(doc, spells, ct);
+}
+
+static void _birth(void)
+{
+    py_birth_obj_aux(TV_HAFTED, SV_WHIP, 1);
+    py_birth_obj_aux(TV_SOFT_ARMOR, SV_SOFT_LEATHER_ARMOR, 1);
+    py_birth_obj_aux(TV_SCROLL, SV_SCROLL_MAPPING, rand_range(5, 10));
+}
+
+void _get_object(obj_ptr obj)
+{
+    if (object_is_artifact(obj) && !object_is_known(obj))
+    {
+        /* Suppress you are leaving something special behind message ... */
+        if (p_ptr->sense_artifact)
+        {
+            p_ptr->sense_artifact = FALSE;    /* There may be more than one? */
+            p_ptr->redraw |= PR_STATUS;
+        }
+
+        if (!(obj->ident & IDENT_SENSE))
+        {
+            char name[MAX_NLEN];
+
+            object_desc(name, obj, OD_COLOR_CODED);
+            cmsg_format(TERM_L_BLUE, "You feel that the %s is %s...", name, game_inscriptions[FEEL_SPECIAL]);
+
+            obj->ident |= IDENT_SENSE;
+            obj->feeling = FEEL_SPECIAL;
+        }
+    }
 }
 
 class_t *archaeologist_get_class(void)
@@ -829,13 +850,17 @@ class_t *archaeologist_get_class(void)
         me.base_hp = 8;
         me.exp = 120;
         me.pets = 40;
+        me.flags = CLASS_SENSE1_FAST | CLASS_SENSE1_STRONG |
+                   CLASS_SENSE2_FAST | CLASS_SENSE2_STRONG;
 
+        me.birth = _birth;
         me.calc_bonuses = _calc_bonuses;
         me.get_flags = _get_flags;
         me.process_player = _process_player;
         me.caster_info = _caster_info;
         me.get_spells = _get_spells;
         me.character_dump = _character_dump;
+        me.get_object = _get_object;
 
         init = TRUE;
     }

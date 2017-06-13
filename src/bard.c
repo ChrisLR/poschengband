@@ -148,7 +148,9 @@ static caster_info * _caster_info(void)
     {
         me.magic_desc = "song";
         me.which_stat = A_CHR;
-        me.weight = 400;
+        me.encumbrance.max_wgt = 400;
+        me.encumbrance.weapon_pct = 67;
+        me.encumbrance.enc_wgt = 800;
         init = TRUE;
     }
     return &me;
@@ -157,7 +159,7 @@ static caster_info * _caster_info(void)
 static void _calc_bonuses(void)
 {
     res_add(RES_SOUND);
-    if (equip_find_artifact(ART_DAERON) || equip_find_artifact(ART_MAGLOR))
+    if (equip_find_art(ART_DAERON) || equip_find_art(ART_MAGLOR))
     {
         p_ptr->dec_mana = TRUE;
         p_ptr->easy_spell = TRUE;
@@ -167,6 +169,13 @@ static void _calc_bonuses(void)
 static void _get_flags(u32b flgs[OF_ARRAY_SIZE])
 {
     add_flag(flgs, OF_RES_SOUND);
+}
+
+static void _birth(void)
+{
+    py_birth_obj_aux(TV_SWORD, SV_SHORT_SWORD, 1);
+    py_birth_obj_aux(TV_SOFT_ARMOR, SV_SOFT_LEATHER_ARMOR, 1);
+    py_birth_spellbooks();
 }
 
 class_t *bard_get_class(void)
@@ -203,7 +212,10 @@ class_t *bard_get_class(void)
         me.base_hp = 4;
         me.exp = 140;
         me.pets = 25;
+        me.flags = CLASS_SENSE1_FAST | CLASS_SENSE1_WEAK |
+                   CLASS_SENSE2_MED | CLASS_SENSE2_STRONG;
 
+        me.birth = _birth;
         me.calc_bonuses = _calc_bonuses;
         me.get_flags = _get_flags;        
         me.caster_info = _caster_info;

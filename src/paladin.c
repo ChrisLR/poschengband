@@ -43,11 +43,20 @@ static caster_info * _caster_info(void)
     {
         me.magic_desc = "prayer";
         me.which_stat = A_WIS;
-        me.weight = 450;
+        me.encumbrance.max_wgt = 450;
+        me.encumbrance.weapon_pct = 20;
+        me.encumbrance.enc_wgt = 1200;
         me.min_fail = 5;
         init = TRUE;
     }
     return &me;
+}
+
+static void _birth(void)
+{
+    py_birth_obj_aux(TV_SWORD, SV_BROAD_SWORD, 1);
+    py_birth_obj_aux(TV_HARD_ARMOR, SV_RING_MAIL, 1);
+    py_birth_spellbooks();
 }
 
 class_t *paladin_get_class(void)
@@ -89,7 +98,10 @@ class_t *paladin_get_class(void)
         me.base_hp = 12;
         me.exp = 135;
         me.pets = 40;
+        me.flags = CLASS_SENSE1_SLOW | CLASS_SENSE1_STRONG |
+                   CLASS_SENSE2_STRONG;
         
+        me.birth = _birth;
         me.calc_bonuses = _calc_bonuses;
         me.caster_info = _caster_info;
         /* TODO: This class uses spell books, so we are SOL
